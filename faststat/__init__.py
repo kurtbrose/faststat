@@ -1,0 +1,1 @@
+from faststat import *

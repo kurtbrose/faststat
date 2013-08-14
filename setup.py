@@ -6,4 +6,5 @@ setup(
     name='faststat',
     version='0.1',
     description='fast online statistics collection',
+    packages=['faststat'],
     ext_modules=[_faststat])
