@@ -4,6 +4,28 @@ http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_st
 
 Intended for use in long-running applications.
 '''
+import array
+import random
+
+
+class Sample(object):
+    '''
+    This class implements Reservoir Sampling to keep a random sample of an infinite stream.
+    See http://gregable.com/2007/10/reservoir-sampling.html for one description.
+    '''
+    def __init__(self, sample_size=2**14, type='f'):
+        self.sample = array.array(type)
+        self.sample_size = sample_size
+        self.num_vals = 0
+
+    def add(self, val):
+        if self.num_vals < self.sample_size:
+            self.sample.append(val)
+        else:
+            pos = random.randint(0, self.num_vals)
+            if pos < self.sample_size:
+                self.sample[pos] = val
+        self.num_vals += 1
 
 
 class PyStats(object):
