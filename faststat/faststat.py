@@ -11,6 +11,7 @@ try:
     class Stats(object):
         def __init__(self):
             self._stats = _faststat.Stats()
+            self.add = self._stats.add
 
         @property
         def variance(self):
