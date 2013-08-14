@@ -45,8 +45,6 @@ class PyStats(object):
         self.m3 += delta_m3 + delta_n * 3 * self.m2
         self.m2 += delta_m2
 
-        self.delta_m4 = delta_m4
-
 try:
     import _faststat
 
