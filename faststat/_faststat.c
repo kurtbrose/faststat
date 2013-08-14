@@ -35,11 +35,12 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     if(PyArg_ParseTuple(args, "d", &x)) {
         self->n++;
         //pre-compute a bunch of intermediate values
+        double n = self->n; // note: math with 32 bit ints can cause problems
         double delta = x - self->mean;
-        double delta_n = delta / self->n;
-        double delta_m2 = delta * delta_n * (self->n - 1);
-        double delta_m3 = delta_m2 * delta_n * (self->n - 2);
-        double delta_m4 = delta_m2 * delta_n * delta_n * (self->n * self->n - 3 * self->n + 3);
+        double delta_n = delta / n;
+        double delta_m2 = delta * delta_n * (n - 1);
+        double delta_m3 = delta_m2 * delta_n * (n - 2);
+        double delta_m4 = delta_m2 * delta_n * delta_n * (n * (n - 3) + 3);
         //compute updated values
         self->min = x < self->min ? x : self->min;
         self->max = x > self->max ? x : self->max;
