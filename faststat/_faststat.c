@@ -61,7 +61,7 @@ static PyMethodDef faststat_Stats_methods[] = {
 static PyTypeObject faststat_StatsType = {
     PyObject_HEAD_INIT(NULL)
     0,                         /*ob_size*/
-    "faststat.Stats",          /*tp_name*/
+    "_faststat.Stats",          /*tp_name*/
     sizeof(faststat_Stats),    /*tp_basicsize*/
     0,                         /*tp_itemsize*/
     0,                         /*tp_dealloc*/
@@ -109,7 +109,6 @@ static PyMethodDef module_methods[] = { {NULL} };
 PyMODINIT_FUNC init_faststat(void) {
     PyObject *module;
 
-    faststat_StatsType.tp_new = PyType_GenericNew;
     if(PyType_Ready(&faststat_StatsType) < 0)
         return;
 
