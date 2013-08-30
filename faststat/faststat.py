@@ -38,14 +38,20 @@ class PyStats(object):
 
     @property
     def variance(self):
+        if self.n < 2:
+            return float("nan")
         return self.m2 / (self.n - 1)
 
     @property
     def skewness(self):
+        if not self.m2:
+            return float("nan")
         return self.n ** 0.5 * self.m3 / self.m2 ** 1.5
 
     @property
     def kurtosis(self):
+        if not self.m2:
+            return float("nan")
         return self.n * self.m4 / self.m2 ** 2 - 3
 
     def add(self, x):
@@ -77,14 +83,20 @@ try:
 
         @property
         def variance(self):
+            if self.n < 2:
+                return float("nan")
             return self.m2 / (self.n - 1)
 
         @property
         def skewness(self):
+            if not self.m2:
+                return float("nan")
             return self.n ** 0.5 * self.m3 / self.m2 ** 1.5
 
         @property
         def kurtosis(self):
+            if not self.m2:
+                return float("nan")
             return self.n * self.m4 / self.m2 ** 2 - 3
 
         def __getattr__(self, name):
