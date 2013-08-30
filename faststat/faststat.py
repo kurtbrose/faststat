@@ -48,9 +48,11 @@ class Sample(object):
                 self.sample[pos] = val
         self.num_vals += 1
 
+DEFAULT_PERCENTILES = (0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
+
 
 class PyStats(object):
-    def __init__(self, buckets=None, lastN=0, percentiles=(0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)):
+    def __init__(self, buckets=(), lastN=0, percentiles=DEFAULT_PERCENTILES):
         self.n = float(0)
         self.mean = float(0)
         # second, third, fourth moments
@@ -122,8 +124,8 @@ try:
     import _faststat
 
     class CStats(object):
-        def __init__(self):
-            self._stats = _faststat.Stats()
+        def __init__(self, buckets=(), lastN=0, percentiles=DEFAULT_PERCENTILES):
+            self._stats = _faststat.Stats(buckets, lastN, percentiles)
             self.add = self._stats.add
 
         @property

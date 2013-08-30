@@ -4,7 +4,7 @@ http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_st
 '''
 import random
 import time
-from faststat import Stats, PyStats, Sample
+from faststat import Stats, PyStats
 
 
 def online_variance(data):
@@ -52,14 +52,10 @@ def test(py=False, sample=False):
         stats = PyStats()
     else:
         stats = Stats()
-    if sample:
-        stats = Sample()
     start = time.time()
     for d in data:
         stats.add(d)
     print time.time() - start, "microseconds per point"
-    if sample:
-        return
     print "mean (should be 1)", stats.mean
     print "kurtosis / reference kurtosis", stats.kurtosis, online_kurtosis(data)
     print "variance / reference variance", stats.variance, online_variance(data)
@@ -96,4 +92,3 @@ def compare():
 if __name__ == "__main__":
     test()
     test(py=True)
-    test(sample=True)
