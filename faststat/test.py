@@ -7,6 +7,12 @@ import time
 from faststat import Stats, PyStats
 
 
+def p2_parabolic(l_v, l_n, c_v, c_n, r_v, r_n, d):
+    return (c_v + (d / (r_n - l_n)) * (
+        (c_n - l_n + d) * (r_v - c_v) / (r_n - c_n) +
+        (r_n - c_n - d) * (c_v - l_v) / (c_n - l_n)))
+
+
 def online_variance(data):
     n = 0
     mean = 0

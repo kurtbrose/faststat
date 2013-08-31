@@ -1,6 +1,7 @@
 #include <Python.h>
 #include <structmember.h>
 #include <pymem.h>
+#include <stdio.h>
 
 
 //percentile point for usage in P2 algorithm
@@ -68,7 +69,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
                 temp = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(percentiles, i));
                 self->percentiles[i].percentile = (unsigned short)(temp * 0x10000);
                 self->percentiles[i].val = 0;
-                self->percentiles[i].n = i;
+                self->percentiles[i].n = i + 1;
             }
         } else {
             self->percentiles = NULL;
@@ -145,59 +146,91 @@ static void _update_moments(faststat_Stats *self, double x) {
 
 
 //helper for _update_percentiles
-static void _p2_update_point(double l_v, unsigned int l_n, faststat_P2Percentile *cur,
-                            double r_v, unsigned int r_n, unsigned int n) {
-    unsigned int d, c_n;
-    double percentile, new_val, c_v, diff;
+static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
+                            double r_v, double r_n, unsigned int n) {
+    unsigned int d;
+    double percentile, new_val, c_v, c_n, diff;
     percentile = ((double)cur->percentile) / 0x10000;
     c_n = cur->n;
     diff = (n - 1) * percentile + 1 - c_n;
+    //if(percentile > 0.9) printf("CALL%0.2f\n", percentile);
     // clamp d at +/- 1
-    if(diff > 1) {
+    if(diff >= 1) {
+       // if(percentile > 0.9) printf("+");
         d = 1;
-    } else if(diff < -1) {
+    } else if(diff <= -1) {
+       // if(percentile > 0.9) printf("-");
         d = -1;
     } else {
+     //   if(percentile > 0.9)
+     //   printf("#%0.3f %0.2f\n", diff, percentile);
         return;
     }
     c_v = cur->val;
     if(l_n < c_n + d && c_n + d < r_n) {  // try updating estimate with parabolic
+        //printf("\nL %0.3f %0.3f C %0.3f %0.3f R %0.3f %0.3f\n", l_v, l_n, c_v, c_n, r_v, r_n);
+        // NOTE: all this math must be floating point!  no ints allowed!
         new_val = c_v + (d / (r_n - l_n)) * ( 
             (c_n - l_n + d) * (r_v - c_v) / (r_n - c_n) +
             (r_n - c_n - d) * (c_v - l_v) / (c_n - l_n));
+        //if(new_val == c_v) {
+        //    printf("?");
+        //    printf("\nL %0.3f %0.3f C %0.3f %0.3f R %0.3f %0.3f\n", l_v, l_n, c_v, c_n, r_v, r_n);
+        //}
+        //printf("parabolic %0.3f\n", new_val);
         if(l_v >= new_val || r_v <= new_val) {  // fall back on linear
             if(d == 1) {
                 new_val = c_v + (r_v - c_v) / (r_n - c_n);
             } else {  // d == -1
                 new_val = c_v - (l_v - c_v) / (l_n - c_n);
             }
+            //printf("linear %0.3f", new_val);
         }
-        cur->val = c_v;
+        //printf("updating %0.2f:  %0.2f to %0.2f (%d -> %d)\n", 
+        //    percentile, cur->val, new_val, cur->n, cur->n+d);
+        cur->val = new_val;
         cur->n += d;
+    } //else {
+    //    if(percentile > 0.9) printf("x");
+   // }
+}
+
+
+static void _insert_percentile_sorted(faststat_Stats *self, double x) {
+    int num, i;
+    double tmp;
+    num = self->n < self->num_percentiles ? self->n : self->num_percentiles;
+    for(i = 0; i < num-1; i++) { //insert in sorted order
+        if(x < self->percentiles[i].val) {
+            tmp = x;
+            x = self->percentiles[i].val;
+            self->percentiles[i].val = x;
+        }
     }
+    self->percentiles[num-1].val = x;
+    //for(i=0; i <= num-1; i++) {
+    //    printf("%0.1f ", self->percentiles[i].val);
+    //}
+    //printf("\n");
 }
 
 
 //update percentiles using piece-wise parametric algorithm
 static void _update_percentiles(faststat_Stats *self, double x) {
     int i;
-    double tmp;
+    //double percentile; //TODO: remove me
     faststat_P2Percentile *right, *left, *cur, *prev, *nxt;
-    if(self->n <= self->num_percentiles) {  //handle start-up case
-        for(i = 0; i < self->n-1; i++) {
-            if(x < self->percentiles[i].val) {
-                tmp = x;
-                x = self->percentiles[i].val;
-                self->percentiles[i].val = x;
-            }
-        }
-        self->percentiles[self->n-1].val = x;
+    right = &(self->percentiles[self->num_percentiles-1]);
+    left = &(self->percentiles[0]);
+    if(!(right->n < self->n) ) { // just insert until self->n > self->num_percentiles
+        _insert_percentile_sorted(self, x);
         return;
     }
     //right-most is stopping case; handle first
-    right = &(self->percentiles[self->num_percentiles-1]);
     if(x < right->val && right->n + 1 < self->n) {
         right->n++;
+        //printf("incrementing right; X %0.2f RV %0.2f RN %d SN %d",
+        //    x, right->val, right->n - 1, self->n);
     }
     //handle the rest of the points
     prev = right;
@@ -209,16 +242,17 @@ static void _update_percentiles(faststat_Stats *self, double x) {
         prev = cur;
     }
     //left-most point is a special case
-    left = &(self->percentiles[0]);
     nxt = &(self->percentiles[1]);
     _p2_update_point(self->min, 0, left, nxt->val, nxt->n, self->n);
-    prev = left;
-    cur = nxt;
+
     for(i=1; i < self->num_percentiles - 1; i++) {
-        nxt = &(self->percentiles[i]);
+        prev = &(self->percentiles[i-1]);
+        cur = &(self->percentiles[i]);
+        nxt = &(self->percentiles[i+1]);
+
+        //percentile = ((double)cur->percentile) / 0x10000;
+        //printf("/%0.2f", percentile);
         _p2_update_point(prev->val, prev->n, cur, nxt->val, nxt->n, self->n);
-        prev = cur;
-        cur = nxt;
     }
     _p2_update_point(cur->val, cur->n, right, self->max, self->n, self->n);
 } 
@@ -236,6 +270,9 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     if(PyArg_ParseTuple(args, "d", &x)) {
         //update extremely basic values: number, min, and max
         self->n++;
+        if(self->n == 1) {
+            self->min = self->max = x;
+        }
         self->min = x < self->min ? x : self->min;
         self->max = x > self->max ? x : self->max;
         _update_moments(self, x);
@@ -247,8 +284,30 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
 }
 
 
+static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *args) {
+    PyObject *p_dict;
+    faststat_P2Percentile *cur;
+    double cur_val;
+    int i;
+    p_dict = PyDict_New();
+    for(i = 0; i < self->num_percentiles; i++) {
+        cur = &(self->percentiles[i]);
+        cur_val = ((double)cur->percentile) / 0x10000;
+        cur_val = round(10000 * cur_val) / 10000;  //re-round to handle slop from being 16 bit number
+        PyDict_SetItem(
+            p_dict, 
+            PyFloat_FromDouble(cur_val), 
+            PyFloat_FromDouble(cur->val));
+    }
+    Py_INCREF(p_dict);
+    return p_dict;
+}
+
+
 static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
+    {"get_percentiles", (PyCFunction)faststat_Stats_get_percentiles, METH_NOARGS, 
+                "construct percentiles dictionary"},
     {NULL}
 };
 
