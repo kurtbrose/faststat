@@ -55,8 +55,8 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
     if(!buckets || !percentiles) { // TODO: decref on buckets and percentiles
         return NULL;
     }
-    num_buckets = PySequence_Fast_GET_SIZE(buckets);
-    num_percentiles = PySequence_Fast_GET_SIZE(percentiles);
+    num_buckets = (int)PySequence_Fast_GET_SIZE(buckets);
+    num_percentiles = (int)PySequence_Fast_GET_SIZE(percentiles);
 
     self = (faststat_Stats*)type->tp_alloc(type, 0);
     if(self != NULL) {
