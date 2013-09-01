@@ -148,51 +148,34 @@ static void _update_moments(faststat_Stats *self, double x) {
 //helper for _update_percentiles
 static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
                             double r_v, double r_n, unsigned int n) {
-    unsigned int d;
+    int d;
     double percentile, new_val, c_v, c_n, diff;
     percentile = ((double)cur->percentile) / 0x10000;
     c_n = cur->n;
     diff = (n - 1) * percentile + 1 - c_n;
-    //if(percentile > 0.9) printf("CALL%0.2f\n", percentile);
     // clamp d at +/- 1
     if(diff >= 1) {
-       // if(percentile > 0.9) printf("+");
         d = 1;
     } else if(diff <= -1) {
-       // if(percentile > 0.9) printf("-");
         d = -1;
     } else {
-     //   if(percentile > 0.9)
-     //   printf("#%0.3f %0.2f\n", diff, percentile);
         return;
     }
     c_v = cur->val;
     if(l_n < c_n + d && c_n + d < r_n) {  // try updating estimate with parabolic
-        //printf("\nL %0.3f %0.3f C %0.3f %0.3f R %0.3f %0.3f\n", l_v, l_n, c_v, c_n, r_v, r_n);
-        // NOTE: all this math must be floating point!  no ints allowed!
         new_val = c_v + (d / (r_n - l_n)) * ( 
             (c_n - l_n + d) * (r_v - c_v) / (r_n - c_n) +
             (r_n - c_n - d) * (c_v - l_v) / (c_n - l_n));
-        //if(new_val == c_v) {
-        //    printf("?");
-        //    printf("\nL %0.3f %0.3f C %0.3f %0.3f R %0.3f %0.3f\n", l_v, l_n, c_v, c_n, r_v, r_n);
-        //}
-        //printf("parabolic %0.3f\n", new_val);
         if(l_v >= new_val || r_v <= new_val) {  // fall back on linear
             if(d == 1) {
                 new_val = c_v + (r_v - c_v) / (r_n - c_n);
             } else {  // d == -1
                 new_val = c_v - (l_v - c_v) / (l_n - c_n);
             }
-            //printf("linear %0.3f", new_val);
         }
-        //printf("updating %0.2f:  %0.2f to %0.2f (%d -> %d)\n", 
-        //    percentile, cur->val, new_val, cur->n, cur->n+d);
         cur->val = new_val;
         cur->n += d;
-    } //else {
-    //    if(percentile > 0.9) printf("x");
-   // }
+    }
 }
 
 
@@ -208,10 +191,6 @@ static void _insert_percentile_sorted(faststat_Stats *self, double x) {
         }
     }
     self->percentiles[num-1].val = x;
-    //for(i=0; i <= num-1; i++) {
-    //    printf("%0.1f ", self->percentiles[i].val);
-    //}
-    //printf("\n");
 }
 
 
@@ -229,8 +208,6 @@ static void _update_percentiles(faststat_Stats *self, double x) {
     //right-most is stopping case; handle first
     if(x < right->val && right->n + 1 < self->n) {
         right->n++;
-        //printf("incrementing right; X %0.2f RV %0.2f RN %d SN %d",
-        //    x, right->val, right->n - 1, self->n);
     }
     //handle the rest of the points
     prev = right;
@@ -244,14 +221,11 @@ static void _update_percentiles(faststat_Stats *self, double x) {
     //left-most point is a special case
     nxt = &(self->percentiles[1]);
     _p2_update_point(self->min, 0, left, nxt->val, nxt->n, self->n);
-
+    cur = left;
     for(i=1; i < self->num_percentiles - 1; i++) {
-        prev = &(self->percentiles[i-1]);
-        cur = &(self->percentiles[i]);
+        prev = cur;
+        cur = nxt;
         nxt = &(self->percentiles[i+1]);
-
-        //percentile = ((double)cur->percentile) / 0x10000;
-        //printf("/%0.2f", percentile);
         _p2_update_point(prev->val, prev->n, cur, nxt->val, nxt->n, self->n);
     }
     _p2_update_point(cur->val, cur->n, right, self->max, self->n, self->n);
