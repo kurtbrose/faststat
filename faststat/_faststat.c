@@ -212,12 +212,15 @@ static void _update_percentiles(faststat_Stats *self, double x) {
     }
     //handle the rest of the points
     prev = right;
-    for(i = self->num_percentiles-2; i >= 0; i--) {
+    for(i = self->num_percentiles-2; ; i--) {
         cur = &(self->percentiles[i]);
         if(x < cur->val && cur->n + 1 < prev->n) {
             cur->n++;
         }
         prev = cur;
+        if(i == 0) { //making i unsigned fixes some warnings
+            break;
+        }
     }
     //left-most point is a special case
     nxt = &(self->percentiles[1]);
