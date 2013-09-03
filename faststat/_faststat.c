@@ -2,6 +2,7 @@
 #include <structmember.h>
 #include <pymem.h>
 #include <stdio.h>
+#include <math.h>
 
 
 //percentile point for usage in P2 algorithm
@@ -28,11 +29,11 @@ typedef struct {
     PyObject_HEAD
     unsigned int n;
     double mean, m2, m3, m4, min, max;
-    int num_percentiles;
+    unsigned int num_percentiles;
     faststat_P2Percentile* percentiles;
-    int num_buckets;
+    unsigned int num_buckets;
     faststat_Bucket* buckets;
-    int num_prev;
+    unsigned int num_prev;
     faststat_PrevSample* lastN;
 } faststat_Stats;
 
@@ -79,7 +80,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
             self->buckets = PyMem_New(faststat_Bucket, num_buckets);
             for(i=0; i<num_buckets; i++) {
                 self->buckets[i].count = 0;
-                self->buckets[i].max = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(buckets, i));
+                self->buckets[i].max = (float)PyFloat_AsDouble(PySequence_Fast_GET_ITEM(buckets, i));
                 // don't bother checking for error; let it raise later
             }
         } else {
@@ -196,7 +197,7 @@ static void _insert_percentile_sorted(faststat_Stats *self, double x) {
 
 //update percentiles using piece-wise parametric algorithm
 static void _update_percentiles(faststat_Stats *self, double x) {
-    int i;
+    unsigned int i;
     //double percentile; //TODO: remove me
     faststat_P2Percentile *right, *left, *cur, *prev, *nxt;
     right = &(self->percentiles[self->num_percentiles-1]);
@@ -262,12 +263,14 @@ static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *
     PyObject *p_dict;
     faststat_P2Percentile *cur;
     double cur_val;
-    int i;
+    unsigned int i;
     p_dict = PyDict_New();
     for(i = 0; i < self->num_percentiles; i++) {
         cur = &(self->percentiles[i]);
         cur_val = ((double)cur->percentile) / 0x10000;
-        cur_val = round(10000 * cur_val) / 10000;  //re-round to handle slop from being 16 bit number
+        cur_val = floor(10000 * cur_val + 0.5) / 10000;  
+        //re-round to handle slop from being 16 bit number
+        // (note: windows math.h does not include round; use floor)
         PyDict_SetItem(
             p_dict, 
             PyFloat_FromDouble(cur_val), 
