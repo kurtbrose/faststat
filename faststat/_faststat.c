@@ -38,7 +38,7 @@ typedef struct {
 } faststat_Stats;
 
 
-char* NEW_ARGS[3] = {"buckets", "lastN", "percentiles"};
+char* NEW_ARGS[4] = {"buckets", "lastN", "percentiles", NULL};
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
