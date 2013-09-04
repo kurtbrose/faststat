@@ -188,7 +188,7 @@ static void _insert_percentile_sorted(faststat_Stats *self, double x) {
         if(x < self->percentiles[i].val) {
             tmp = x;
             x = self->percentiles[i].val;
-            self->percentiles[i].val = x;
+            self->percentiles[i].val = tmp;
         }
     }
     self->percentiles[num-1].val = x;
