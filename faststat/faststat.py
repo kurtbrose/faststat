@@ -146,6 +146,10 @@ try:
                 return float("nan")
             return self.n * self.m4 / self.m2 ** 2 - 3
 
+        @property
+	def percentiles(self):
+	    return self.get_percentiles()
+
         def __getattr__(self, name):
             return getattr(self._stats, name)
 
