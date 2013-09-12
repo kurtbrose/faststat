@@ -4,6 +4,40 @@
 #include <stdio.h>
 #include <math.h>
 
+//define gettime() which returns integral nanoseconds since epoch
+//as a 64 bit integer for a variety of platforms
+#ifdef _WIN32
+//windows has its own brand of time keeping functions
+#include <windows.h>
+#define DELTA_EPOCH_IN_SECS  11644473600ULL
+//difference between Jan 1, 1601 and Jan 1, 1970 (unix epoch)
+
+static unsigned long long nanotime() {
+    FILETIME ft;
+    ULARGE_INTEGER result;
+    GetSystemTimeAsFileTime(&ft); //returns time in 100ns intervals since Jan 1, 1601
+    result.HighPart = ft.dwHighDateTime;
+    result.LowPart = ft.dwLowDateTime;
+    result.QuadPart -= DELTA_EPOCH_IN_SECS * 10000000ULL; // 1000 (ms) * 1000 (us) * 10 (100ns)
+    return result.QuadPart * 100;
+}
+
+#elif defined linux
+//linux has clock_gettime(CLOCK_REALTIME) which is ns since epoch -- perfect
+#include <time.h>
+
+static unsigned long long nanotime() {
+    return 0;
+}
+
+#else
+//for those oddballs like OSX and BSD, fall back on gettimeofday() which is at least microseconds
+
+static unsigned long long nanotime() {
+    return 0;
+}
+
+#endif
 
 //percentile point for usage in P2 algorithm
 typedef struct {
@@ -335,7 +369,18 @@ static PyTypeObject faststat_StatsType = {
 };
 
 
-static PyMethodDef module_methods[] = { {NULL} };
+PyObject* pynanotime(PyObject* args) {
+    PyObject *result;
+    result = PyLong_FromUnsignedLongLong(nanotime());
+    Py_INCREF(result);
+    return result;
+}
+
+
+static PyMethodDef module_methods[] = { 
+    {"nanotime", (PyCFunction)pynanotime, METH_NOARGS, 
+                "get integral nanoseconds since unix epoch"},
+    {NULL} };
 
 
 #ifndef PyMODINIT_FUNC  /* declarations for DLL import/export */
