@@ -27,14 +27,23 @@ static unsigned long long nanotime() {
 #include <time.h>
 
 static unsigned long long nanotime() {
-    return 0;
+    struct timespec ts;
+    if(clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+        return 0;
+    }
+    return 1000000000ULL * ts.tv_sec + ts.tv_nsec;
 }
 
 #else
 //for those oddballs like OSX and BSD, fall back on gettimeofday() which is at least microseconds
+#include <time.h>
 
 static unsigned long long nanotime() {
-    return 0;
+    struct timeval tv;
+    if(gettimeofday(&tv, NULL) == -1) {
+        return 0;
+    }
+    return tv.tv_sec * 1000000000ULL + tv.tv_usec * 1000ULL;
 }
 
 #endif
