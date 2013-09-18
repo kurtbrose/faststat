@@ -2,7 +2,7 @@ import platform
 from distutils.core import setup, Extension
 
 _faststat = Extension('_faststat', sources=['faststat/_faststat.c'], 
-                      extra_link_args=['-lrt'])
+                      libraries=('rt',), extra_link_args=['-lrt'], extra_compile_args=['-lrt'])
 
 setup(
     name='faststat',
