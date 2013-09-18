@@ -55,7 +55,7 @@ typedef struct {
 
 typedef struct {
     double value;
-    double timestamp;
+    unsigned long long nanotime;
 } faststat_PrevSample;
 
 
@@ -63,6 +63,7 @@ typedef struct {
     PyObject_HEAD
     unsigned int n;
     double mean, m2, m3, m4, min, max;
+    unsigned long long mintime, maxtime;
     unsigned int num_percentiles;
     faststat_P2Percentile* percentiles;
     unsigned int num_buckets;
@@ -125,7 +126,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
             self->lastN = PyMem_New(faststat_PrevSample, num_prev);
             for(i=0; i<num_prev; i++) {
                 self->lastN[i].value = 0;
-                self->lastN[i].timestamp = 0;
+                self->lastN[i].nanotime = 0;
             }
         } else {
             self->lastN = NULL;
@@ -154,6 +155,10 @@ static PyMemberDef faststat_Stats_members[] = {
     {"mean", T_DOUBLE, offsetof(faststat_Stats, mean), 0, "mean"},
     {"min", T_DOUBLE, offsetof(faststat_Stats, min), 0, "min"},
     {"max", T_DOUBLE, offsetof(faststat_Stats, max), 0, "max"},
+    {"mintime", T_ULONGLONG, offsetof(faststat_Stats, mintime), 0, 
+                      "time (in nanoseconds since epoch) that minimum value was seen"},
+    {"maxtime", T_ULONGLONG, offsetof(faststat_Stats, maxtime), 0,
+                      "time (in nanoseconds since epoch) that maximum value was seen"},
     {"m2", T_DOUBLE, offsetof(faststat_Stats, m2), 0, "m2"},
     {"m3", T_DOUBLE, offsetof(faststat_Stats, m3), 0, "m3"},
     {"m4", T_DOUBLE, offsetof(faststat_Stats, m4), 0, "m4"},
@@ -275,18 +280,31 @@ static void _update_buckets(faststat_Stats *self, double x) {
 }
 
 
+static void _update_lastN(faststat_Stats *self, double x, unsigned long long cur_nanotime) {
+
+}
+
+
 static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     //visual studios hates in-line variable declaration
     double x;
+    unsigned long long cur_nanotime;
     x = 0;
+    cur_nanotime = nanotime();
     if(PyArg_ParseTuple(args, "d", &x)) {
         //update extremely basic values: number, min, and max
         self->n++;
         if(self->n == 1) {
             self->min = self->max = x;
         }
-        self->min = x < self->min ? x : self->min;
-        self->max = x > self->max ? x : self->max;
+        if(x <= self->min) {
+            self->mintime = cur_nanotime;
+            self->min = x;
+        }
+        if(x >= self->max) {
+            self->maxtime = cur_nanotime;
+            self->max = x;
+        }
         _update_moments(self, x);
         _update_percentiles(self, x);
         _update_buckets(self, x);

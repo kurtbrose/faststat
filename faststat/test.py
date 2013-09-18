@@ -66,7 +66,7 @@ def test(py=False, sample=False):
     print "kurtosis / reference kurtosis", stats.kurtosis, online_kurtosis(data)
     print "variance / reference variance", stats.variance, online_variance(data)
     print "skewness (should be 0)", stats.skewness
-    print "max, min", stats.max, stats.min
+    print "max, min, mintime, maxtime", stats.max, stats.min, stats.mintime, stats.maxtime
     print "m2, m3, m4", stats.m2, stats.m3, stats.m4
 
 

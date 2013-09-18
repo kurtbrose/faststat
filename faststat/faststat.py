@@ -57,7 +57,7 @@ class PyStats(object):
         self.mean = float(0)
         # second, third, fourth moments
         self.m2 = self.m3 = self.m4 = float(0)
-        self.min = self.max = float(0)
+        self.min = self.max = self.mintime = self.maxtime = float(0)
         self.buckets = buckets
         if buckets:
             self.bucket_counts = [8] * (len(buckets) + 1)
@@ -84,6 +84,7 @@ class PyStats(object):
         return self.n * self.m4 / self.m2 ** 2 - 3
 
     def add(self, x):
+        t = int(time.time() * 1e9)
         ### 1- calculate variance
         self.n += 1
         n = self.n
@@ -94,8 +95,12 @@ class PyStats(object):
         delta_m3 = delta_m2 * delta_n * (n - 2)
         delta_m4 = delta_m2 * delta_n * delta_n * (n * (n - 3) + 3)
         # compute the actual next values
-        self.min = x if x < self.min else self.min
-        self.max = x if x > self.max else self.max
+        if x <= self.min:
+            self.min = x
+            self.mintime = t
+        if x >= self.max:
+            self.max = x
+            self.maxtime = t
         self.mean = self.mean + delta_n
         # note: order matters here
         self.m4 += delta_m4 + delta_n * (6 * delta_n * self.m2 - 4 * self.m3)
@@ -103,7 +108,7 @@ class PyStats(object):
         self.m2 += delta_m2
         ### 2- append to most recent, if being stored
         if self.lastN:
-            self.most_recent.insert(0, (time.time(), x))
+            self.most_recent.insert(0, (t, x))
             if len(self.most_recent) > self.lastN:
                 self.most_recent.pop()
         ### 3- update bucket counts
