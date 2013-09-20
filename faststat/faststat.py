@@ -52,7 +52,7 @@ DEFAULT_PERCENTILES = (0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
 
 
 class PyStats(object):
-    def __init__(self, buckets=(), lastN=0, percentiles=DEFAULT_PERCENTILES):
+    def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
         self.n = float(0)
         self.mean = float(0)
         # second, third, fourth moments
@@ -108,7 +108,7 @@ class PyStats(object):
         self.m2 += delta_m2
         ### 2- append to most recent, if being stored
         if self.lastN:
-            self.most_recent.insert(0, (t, x))
+            self.most_recent.appendleft((t, x))
             if len(self.most_recent) > self.lastN:
                 self.most_recent.pop()
         ### 3- update bucket counts
@@ -129,7 +129,7 @@ try:
     import _faststat
 
     class CStats(object):
-        def __init__(self, buckets=(), lastN=0, percentiles=DEFAULT_PERCENTILES):
+        def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
             self._stats = _faststat.Stats(buckets, lastN, percentiles)
             self.add = self._stats.add
 

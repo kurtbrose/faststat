@@ -72,17 +72,24 @@ typedef struct {
     PyObject_HEAD
     unsigned int n;
     double mean, m2, m3, m4, min, max;
-    unsigned long long mintime, maxtime;
+    unsigned long long mintime, maxtime, lasttime;
     unsigned int num_percentiles;
     faststat_P2Percentile* percentiles;
     unsigned int num_buckets;
     faststat_Bucket* buckets;
     unsigned int num_prev;
     faststat_PrevSample* lastN;
+    struct faststat_Stats *interval;
 } faststat_Stats;
+
+/*
+typedef struct {
+
+}*/
 
 
 char* NEW_ARGS[4] = {"buckets", "lastN", "percentiles", NULL};
+
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
@@ -90,7 +97,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
     int num_prev, num_buckets, num_percentiles;
     int i;
     double temp;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OdO", NEW_ARGS, 
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiO", NEW_ARGS, 
                                  &buckets, &num_prev, &percentiles)) {
         return NULL;
     }
@@ -105,8 +112,10 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
 
     self = (faststat_Stats*)type->tp_alloc(type, 0);
     if(self != NULL) {
+        self->interval = NULL;
         self->n = 0;
         self->mean = self->m2 = self->m3 = self->m4 = self->min = self->max = 0;
+        self->mintime = self->maxtime = self->lasttime = 0;
         self->num_percentiles = num_percentiles;
         if(num_percentiles) {
             self->percentiles = PyMem_New(faststat_P2Percentile, num_percentiles);
@@ -160,17 +169,20 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
 
 
 static PyMemberDef faststat_Stats_members[] = {
-    {"n", T_UINT, offsetof(faststat_Stats, n), 0, "numder of points"},
-    {"mean", T_DOUBLE, offsetof(faststat_Stats, mean), 0, "mean"},
-    {"min", T_DOUBLE, offsetof(faststat_Stats, min), 0, "min"},
-    {"max", T_DOUBLE, offsetof(faststat_Stats, max), 0, "max"},
-    {"mintime", T_ULONGLONG, offsetof(faststat_Stats, mintime), 0, 
+    {"n", T_UINT, offsetof(faststat_Stats, n), READONLY, "numder of points"},
+    {"mean", T_DOUBLE, offsetof(faststat_Stats, mean), READONLY, "mean"},
+    {"min", T_DOUBLE, offsetof(faststat_Stats, min), READONLY, "min"},
+    {"max", T_DOUBLE, offsetof(faststat_Stats, max), READONLY, "max"},
+    {"lasttime", T_ULONGLONG, offsetof(faststat_Stats, lasttime), READONLY,
+                      "time (in nanoseconds since epoch) of last call to add"},
+    {"mintime", T_ULONGLONG, offsetof(faststat_Stats, mintime), READONLY, 
                       "time (in nanoseconds since epoch) that minimum value was seen"},
-    {"maxtime", T_ULONGLONG, offsetof(faststat_Stats, maxtime), 0,
+    {"maxtime", T_ULONGLONG, offsetof(faststat_Stats, maxtime), READONLY,
                       "time (in nanoseconds since epoch) that maximum value was seen"},
-    {"m2", T_DOUBLE, offsetof(faststat_Stats, m2), 0, "m2"},
-    {"m3", T_DOUBLE, offsetof(faststat_Stats, m3), 0, "m3"},
-    {"m4", T_DOUBLE, offsetof(faststat_Stats, m4), 0, "m4"},
+    {"m2", T_DOUBLE, offsetof(faststat_Stats, m2), READONLY, "m2"},
+    {"m3", T_DOUBLE, offsetof(faststat_Stats, m3), READONLY, "m3"},
+    {"m4", T_DOUBLE, offsetof(faststat_Stats, m4), READONLY, "m4"},
+    {"interval", T_OBJECT, offsetof(faststat_Stats, interval), READONLY, "interval"},
     {NULL}
 };
 
@@ -289,34 +301,62 @@ static void _update_buckets(faststat_Stats *self, double x) {
 }
 
 
-static void _update_lastN(faststat_Stats *self, double x, unsigned long long cur_nanotime) {
+static void _update_lastN(faststat_Stats *self, double x) {
+    unsigned int offset;
+    if(self->num_prev == 0) { return; }
+    offset = (self->n - 1) % self->num_prev;
+    self->lastN[offset].value = x;
+    self->lastN[offset].nanotime = self->lasttime;
+}
 
+
+static void _add(faststat_Stats *self, double x) {
+    //update extremely basic values: number, min, and max
+    self->lasttime = nanotime();
+    self->n++;
+    if(self->n == 1) {
+        self->min = self->max = x;
+        self->mintime = self->maxtime = self->lasttime;
+    }
+    if(x <= self->min) {
+        self->mintime = self->lasttime;
+        self->min = x;
+    }
+    if(x >= self->max) {
+        self->maxtime = self->lasttime;
+        self->max = x;
+    }
+    _update_moments(self, x);
+    _update_percentiles(self, x);
+    _update_buckets(self, x);
+    _update_lastN(self, x);
 }
 
 
 static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     //visual studios hates in-line variable declaration
     double x;
-    unsigned long long cur_nanotime;
     x = 0;
-    cur_nanotime = nanotime();
     if(PyArg_ParseTuple(args, "d", &x)) {
         //update extremely basic values: number, min, and max
+        self->lasttime = nanotime();
         self->n++;
         if(self->n == 1) {
             self->min = self->max = x;
+            self->mintime = self->maxtime = self->lasttime;
         }
         if(x <= self->min) {
-            self->mintime = cur_nanotime;
+            self->mintime = self->lasttime;
             self->min = x;
         }
         if(x >= self->max) {
-            self->maxtime = cur_nanotime;
+            self->maxtime = self->lasttime;
             self->max = x;
         }
         _update_moments(self, x);
         _update_percentiles(self, x);
         _update_buckets(self, x);
+        _update_lastN(self, x);
     }
     Py_INCREF(Py_None);
     return Py_None;
@@ -345,10 +385,44 @@ static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *
 }
 
 
+static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
+    int offset;
+    double val;
+    unsigned long long nanotime;
+    if(self->num_prev == 0) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    PyObject *tuple, *pyval, *pytime;
+    offset = 0;
+    if(PyArg_ParseTuple(args, "i", &offset)) {
+        offset = ((self->n - 1)  + (self->num_prev - offset)) % self->num_prev;
+        val = self->lastN[offset].value;
+        nanotime = self->lastN[offset].nanotime;
+        pyval = PyFloat_FromDouble(val);
+        pytime = PyLong_FromUnsignedLongLong(nanotime);
+        if(pyval != NULL && pytime != NULL) {
+            tuple = PyTuple_Pack(2, pytime, pyval);
+            if(tuple != NULL) {
+                Py_INCREF(pyval);
+                Py_INCREF(pytime);
+                Py_INCREF(tuple);
+                return tuple;
+            }
+        }
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
 static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
     {"get_percentiles", (PyCFunction)faststat_Stats_get_percentiles, METH_NOARGS, 
                 "construct percentiles dictionary"},
+    {"get_prev", (PyCFunction)faststat_Stats_get_prev, METH_VARARGS,
+                "get the nth previous sample"},
     {NULL}
 };
 
