@@ -128,10 +128,16 @@ class PyStats(object):
 try:
     import _faststat
 
+    # keep buckets for intervals in size from 100ns to ~14 hours
+    INTERVAL_BUCKETS = sum( 
+        [(1*10**-x, 2*10**-x, 5*10**-x) for x in (7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4)], ()) 
+
     class CStats(object):
         def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
-            self._stats = _faststat.Stats(buckets, lastN, percentiles)
+            interval = _faststat.Stats(INTERVAL_BUCKETS, lastN, DEFAULT_PERCENTILES, None)
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, interval)
             self.add = self._stats.add
+            self.interval = CInterval(self._stats.interval)
 
         @property
         def variance(self):
@@ -152,13 +158,39 @@ try:
             return self.n * self.m4 / self.m2 ** 2 - 3
 
         @property
-	def percentiles(self):
-	    return self.get_percentiles()
+        def percentiles(self):
+            return self.get_percentiles()
+
+        def __getattr__(self, name):
+            return getattr(self._stats, name)
+
+    class CInterval(object):
+        '''
+        Intervals are expected to be expovariate.
+        kurtosis and skewness are radically incorrect, so do not expose them.
+        '''
+        def __init__(self, _stats):
+            self._stats = _stats
+
+        @property
+        def variance(self):
+            if self.n < 2:
+                return float("nan")
+            return self.m2 / (self.n - 1)
+
+        @property
+        def lambd(self):
+            return 1 / self.mean
+
+        @property
+        def percentiles(self):
+            return self.get_percentiles()
 
         def __getattr__(self, name):
             return getattr(self._stats, name)
 
     Stats = CStats
+    nanotime = _faststat.nanotime
 
 except ImportError:
     CStats = None

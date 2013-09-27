@@ -67,10 +67,11 @@ typedef struct {
     unsigned long long nanotime;
 } faststat_PrevSample;
 
-
-typedef struct {
+// for representing a normally distributed variable
+typedef struct faststat_Stats_struct {
+    PyObject_HEAD
     unsigned long long n;
-    double mean, min, max;
+    double mean, min, max, m2, m3, m4;
     unsigned long long mintime, maxtime, lasttime;
     unsigned int num_percentiles;
     faststat_P2Percentile *percentiles;
@@ -78,42 +79,28 @@ typedef struct {
     faststat_Bucket *buckets;
     unsigned int num_prev;
     faststat_PrevSample *lastN;
-} faststat_Base;
-
-
-// for representing a normally distributed variable
-typedef struct {
-    PyObject_HEAD
-    struct faststat_Base base;
-    double m2, m3, m4;
-    struct faststat_Stats *interval;
+    struct faststat_Stats_struct *interval;
 } faststat_Stats;
 
-
+/*
 typedef struct {
     unsigned int n;
-    unsigned int num_prev
+    unsigned int num_prev;
 
 } faststat_StatsGroup;
+*/
 
-// for representing an interval (inverse of a Poisson distributed variable)
-typedef struct {
-    struct faststat_Base base;
-    double lambda;
-} faststat_Interval;
-
-
-char* NEW_ARGS[4] = {"buckets", "lastN", "percentiles", NULL};
+char* NEW_ARGS[4] = {"buckets", "lastN", "percentiles", "interval", NULL};
 
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
-    PyObject *buckets, *percentiles;
+    PyObject *buckets, *percentiles, *interval;
     int num_prev, num_buckets, num_percentiles;
     int i;
     double temp;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiO", NEW_ARGS, 
-                                 &buckets, &num_prev, &percentiles)) {
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOO", NEW_ARGS, 
+                                 &buckets, &num_prev, &percentiles, &interval)) {
         return NULL;
     }
 
@@ -132,6 +119,11 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         self->mean = self->m2 = self->m3 = self->m4 = self->min = self->max = 0;
         self->mintime = self->maxtime = self->lasttime = 0;
         self->num_percentiles = num_percentiles;
+        if(interval != Py_None ) {
+            self->interval = interval; // WARNING: incompatible pointer type..
+        } else {                 // TODO: figure out a better test of type here
+            self->interval = NULL;
+        }
         if(num_percentiles) {
             self->percentiles = PyMem_New(faststat_P2Percentile, num_percentiles);
             for(i=0; i<num_percentiles; i++) {
@@ -255,7 +247,7 @@ static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
 }
 
 
-static void _insert_percentile_sorted(faststat_Base *self, double x) {
+static void _insert_percentile_sorted(faststat_Stats *self, double x) {
     int num, i;
     double tmp;
     num = self->n < self->num_percentiles ? self->n : self->num_percentiles;
@@ -271,7 +263,7 @@ static void _insert_percentile_sorted(faststat_Base *self, double x) {
 
 
 //update percentiles using piece-wise parametric algorithm
-static void _update_percentiles(faststat_Base *self, double x) {
+static void _update_percentiles(faststat_Stats *self, double x) {
     unsigned int i;
     //double percentile; //TODO: remove me
     faststat_P2Percentile *right, *left, *cur, *prev, *nxt;
@@ -311,12 +303,12 @@ static void _update_percentiles(faststat_Base *self, double x) {
 } 
 
 
-static void _update_buckets(faststat_Base *self, double x) {
+static void _update_buckets(faststat_Stats *self, double x) {
 
 }
 
 
-static void _update_lastN(faststat_Base *self, double x) {
+static void _update_lastN(faststat_Stats *self, double x) {
     unsigned int offset;
     if(self->num_prev == 0) { return; }
     offset = (self->n - 1) % self->num_prev;
@@ -325,14 +317,14 @@ static void _update_lastN(faststat_Base *self, double x) {
 }
 
 
-static void _add(faststat_Stats *self, double x) {
+static void _add(faststat_Stats *self, double x, unsigned long long t) {
     //update extremely basic values: number, min, and max
-    self->base.lasttime = nanotime();
-    self->base.n++;
-    if(self->base.n == 1) {
-        self->base.min = self->base.max = x;
-        self->base.mintime = self->base.maxtime = self->lasttime;
-    }  // TODO: split this up properly
+    self->lasttime = t;
+    self->n++;
+    if(self->n == 1) {
+        self->min = self->max = x;
+        self->mintime = self->maxtime = self->lasttime;
+    }
     if(x <= self->min) {
         self->mintime = self->lasttime;
         self->min = x;
@@ -351,27 +343,15 @@ static void _add(faststat_Stats *self, double x) {
 static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     //visual studios hates in-line variable declaration
     double x;
+    unsigned long long t;
     x = 0;
+    t = 0;
     if(PyArg_ParseTuple(args, "d", &x)) {
-        //update extremely basic values: number, min, and max
-        self->lasttime = nanotime();
-        self->n++;
-        if(self->n == 1) {
-            self->min = self->max = x;
-            self->mintime = self->maxtime = self->lasttime;
+        t = nanotime();
+        if(self->interval && self->lasttime) {
+            _add(self->interval, t - self->lasttime, t);
         }
-        if(x <= self->min) {
-            self->mintime = self->lasttime;
-            self->min = x;
-        }
-        if(x >= self->max) {
-            self->maxtime = self->lasttime;
-            self->max = x;
-        }
-        _update_moments(self, x);
-        _update_percentiles(self, x);
-        _update_buckets(self, x);
-        _update_lastN(self, x);
+        _add(self, x, t);
     }
     Py_INCREF(Py_None);
     return Py_None;
