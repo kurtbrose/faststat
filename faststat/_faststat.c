@@ -69,23 +69,38 @@ typedef struct {
 
 
 typedef struct {
-    PyObject_HEAD
-    unsigned int n;
-    double mean, m2, m3, m4, min, max;
+    unsigned long long n;
+    double mean, min, max;
     unsigned long long mintime, maxtime, lasttime;
     unsigned int num_percentiles;
-    faststat_P2Percentile* percentiles;
+    faststat_P2Percentile *percentiles;
     unsigned int num_buckets;
-    faststat_Bucket* buckets;
+    faststat_Bucket *buckets;
     unsigned int num_prev;
-    faststat_PrevSample* lastN;
+    faststat_PrevSample *lastN;
+} faststat_Base;
+
+
+// for representing a normally distributed variable
+typedef struct {
+    PyObject_HEAD
+    struct faststat_Base base;
+    double m2, m3, m4;
     struct faststat_Stats *interval;
 } faststat_Stats;
 
-/*
-typedef struct {
 
-}*/
+typedef struct {
+    unsigned int n;
+    unsigned int num_prev
+
+} faststat_StatsGroup;
+
+// for representing an interval (inverse of a Poisson distributed variable)
+typedef struct {
+    struct faststat_Base base;
+    double lambda;
+} faststat_Interval;
 
 
 char* NEW_ARGS[4] = {"buckets", "lastN", "percentiles", NULL};
@@ -240,7 +255,7 @@ static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
 }
 
 
-static void _insert_percentile_sorted(faststat_Stats *self, double x) {
+static void _insert_percentile_sorted(faststat_Base *self, double x) {
     int num, i;
     double tmp;
     num = self->n < self->num_percentiles ? self->n : self->num_percentiles;
@@ -256,7 +271,7 @@ static void _insert_percentile_sorted(faststat_Stats *self, double x) {
 
 
 //update percentiles using piece-wise parametric algorithm
-static void _update_percentiles(faststat_Stats *self, double x) {
+static void _update_percentiles(faststat_Base *self, double x) {
     unsigned int i;
     //double percentile; //TODO: remove me
     faststat_P2Percentile *right, *left, *cur, *prev, *nxt;
@@ -296,12 +311,12 @@ static void _update_percentiles(faststat_Stats *self, double x) {
 } 
 
 
-static void _update_buckets(faststat_Stats *self, double x) {
+static void _update_buckets(faststat_Base *self, double x) {
 
 }
 
 
-static void _update_lastN(faststat_Stats *self, double x) {
+static void _update_lastN(faststat_Base *self, double x) {
     unsigned int offset;
     if(self->num_prev == 0) { return; }
     offset = (self->n - 1) % self->num_prev;
@@ -312,12 +327,12 @@ static void _update_lastN(faststat_Stats *self, double x) {
 
 static void _add(faststat_Stats *self, double x) {
     //update extremely basic values: number, min, and max
-    self->lasttime = nanotime();
-    self->n++;
-    if(self->n == 1) {
-        self->min = self->max = x;
-        self->mintime = self->maxtime = self->lasttime;
-    }
+    self->base.lasttime = nanotime();
+    self->base.n++;
+    if(self->base.n == 1) {
+        self->base.min = self->base.max = x;
+        self->base.mintime = self->base.maxtime = self->lasttime;
+    }  // TODO: split this up properly
     if(x <= self->min) {
         self->mintime = self->lasttime;
         self->min = x;
