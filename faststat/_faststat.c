@@ -90,7 +90,7 @@ typedef struct {
 } faststat_StatsGroup;
 */
 
-char* NEW_ARGS[4] = {"buckets", "lastN", "percentiles", "interval", NULL};
+char* NEW_ARGS[5] = {"buckets", "lastN", "percentiles", "interval", NULL};
 
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
@@ -304,7 +304,13 @@ static void _update_percentiles(faststat_Stats *self, double x) {
 
 
 static void _update_buckets(faststat_Stats *self, double x) {
-
+    unsigned int i;
+    for(i=0; i < self->num_buckets; i++) {
+        if(x < self->buckets[i].max) {
+            self->buckets[i].count++;
+            break;
+        }
+    }
 }
 
 
@@ -380,6 +386,27 @@ static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *
 }
 
 
+static PyObject* faststat_Stats_get_buckets(faststat_Stats* self, PyObject *args) {
+    PyObject *b_dict;
+    faststat_Bucket *cur;
+    unsigned int i;
+    unsigned long long leftover;
+    leftover = self->n;
+    b_dict = PyDict_New();
+    for(i = 0; i < self->num_buckets; i++) {
+        cur = &(self->buckets[i]);
+        leftover -= cur->count;
+        PyDict_SetItem(
+            b_dict,
+            PyFloat_FromDouble(cur->max),
+            PyLong_FromUnsignedLongLong(cur->count));
+    }
+    PyDict_SetItem(b_dict, Py_None, PyLong_FromUnsignedLongLong(leftover));
+    Py_INCREF(b_dict);
+    return b_dict;
+}
+
+
 static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
     int offset;
     double val;
@@ -416,6 +443,8 @@ static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
     {"get_percentiles", (PyCFunction)faststat_Stats_get_percentiles, METH_NOARGS, 
                 "construct percentiles dictionary"},
+    {"get_buckets", (PyCFunction)faststat_Stats_get_buckets, METH_NOARGS,
+                "construct buckets dictionary"},
     {"get_prev", (PyCFunction)faststat_Stats_get_prev, METH_VARARGS,
                 "get the nth previous sample"},
     {NULL}

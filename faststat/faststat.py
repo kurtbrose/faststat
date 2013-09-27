@@ -161,6 +161,10 @@ try:
         def percentiles(self):
             return self.get_percentiles()
 
+        @property
+        def buckets(self):
+            return self.get_buckets()
+
         def __getattr__(self, name):
             return getattr(self._stats, name)
 
@@ -185,6 +189,10 @@ try:
         @property
         def percentiles(self):
             return self.get_percentiles()
+
+        @property
+        def buckets(self):
+            return self.get_buckets()
 
         def __getattr__(self, name):
             return getattr(self._stats, name)
