@@ -120,7 +120,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         self->mintime = self->maxtime = self->lasttime = 0;
         self->num_percentiles = num_percentiles;
         if(interval != Py_None ) {
-            self->interval = interval; // WARNING: incompatible pointer type..
+            self->interval = (faststat_Stats*)interval; // WARNING: incompatible pointer type..
         } else {                 // TODO: figure out a better test of type here
             self->interval = NULL;
         }
@@ -197,7 +197,7 @@ static PyMemberDef faststat_Stats_members[] = {
 //update mean, and second third and fourth moments
 static void _update_moments(faststat_Stats *self, double x) {
     double n, delta, delta_n, delta_m2, delta_m3, delta_m4;
-    n = self->n; // note: math with 32 bit ints can cause problems
+    n = (double)self->n; // note: math with 32 bit ints can cause problems
     //pre-compute a bunch of intermediate values
     delta = x - self->mean;
     delta_n = delta / n;
@@ -215,7 +215,7 @@ static void _update_moments(faststat_Stats *self, double x) {
 
 //helper for _update_percentiles
 static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
-                            double r_v, double r_n, unsigned int n) {
+                            double r_v, double r_n, unsigned long long n) {
     int d;
     double percentile, new_val, c_v, c_n, diff;
     percentile = ((double)cur->percentile) / 0x10000;
@@ -248,7 +248,7 @@ static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
 
 
 static void _insert_percentile_sorted(faststat_Stats *self, double x) {
-    int num, i;
+    unsigned long long num, i;  // prevent loss of precision compiler warning
     double tmp;
     num = self->n < self->num_percentiles ? self->n : self->num_percentiles;
     for(i = 0; i < num-1; i++) { //insert in sorted order
@@ -299,7 +299,7 @@ static void _update_percentiles(faststat_Stats *self, double x) {
         nxt = &(self->percentiles[i+1]);
         _p2_update_point(prev->val, prev->n, cur, nxt->val, nxt->n, self->n);
     }
-    _p2_update_point(cur->val, cur->n, right, self->max, self->n, self->n);
+    _p2_update_point(cur->val, cur->n, right, (double)self->max, (double)self->n, self->n);
 } 
 
 
@@ -355,7 +355,7 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     if(PyArg_ParseTuple(args, "d", &x)) {
         t = nanotime();
         if(self->interval && self->lasttime) {
-            _add(self->interval, t - self->lasttime, t);
+            _add(self->interval, (double)(t - self->lasttime), t);
         }
         _add(self, x, t);
     }
@@ -371,9 +371,9 @@ static PyObject* faststat_Stats_end(faststat_Stats *self, PyObject *args) {
     if(PyArg_ParseTuple(args, "K", &start)) {
         end = nanotime();
         if(self->interval && self->lasttime) {
-            _add(self->interval, end - self->lasttime, end);
+            _add(self->interval, (double)(end - self->lasttime), end);
         }
-        _add(self, end - start, end);
+        _add(self, (double)(end - start), end);
     }
     Py_INCREF(Py_None);
     return Py_None;
@@ -386,7 +386,7 @@ static PyObject* faststat_Stats_tick(faststat_Stats *self, PyObject *args) {
     unsigned long long t;
     t = nanotime();
     if(self->lasttime) {
-        _add(self, t - self->lasttime, t);
+        _add(self, (double)(t - self->lasttime), t);
     } else {
         self->lasttime = t;
     }
@@ -441,13 +441,13 @@ static PyObject* faststat_Stats_get_buckets(faststat_Stats* self, PyObject *args
 static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
     int offset;
     double val;
+    PyObject *tuple, *pyval, *pytime;
     unsigned long long nanotime;
     if(self->num_prev == 0) {
         Py_INCREF(Py_None);
         return Py_None;
     }
 
-    PyObject *tuple, *pyval, *pytime;
     offset = 0;
     if(PyArg_ParseTuple(args, "i", &offset)) {
         offset = ((self->n - 1)  + (self->num_prev - offset)) % self->num_prev;
