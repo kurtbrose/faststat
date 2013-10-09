@@ -364,6 +364,37 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
 }
 
 
+static PyObject* faststat_Stats_end(faststat_Stats *self, PyObject *args) {
+    unsigned long long end;
+    unsigned long long start;
+    end = start = 0;
+    if(PyArg_ParseTuple(args, "K", &start)) {
+        end = nanotime();
+        if(self->interval && self->lasttime) {
+            _add(self->interval, end - self->lasttime, end);
+        }
+        _add(self, end - start, end);
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+static PyObject* faststat_Stats_tick(faststat_Stats *self, PyObject *args) {
+    //tricky part is how to handle the first tick
+    // weird part will be that calling tick N times results in N-1 data points
+    unsigned long long t;
+    t = nanotime();
+    if(self->lasttime) {
+        _add(self, t - self->lasttime, t);
+    } else {
+        self->lasttime = t;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
 static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *args) {
     PyObject *p_dict;
     faststat_P2Percentile *cur;
@@ -441,6 +472,8 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
 
 static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
+    {"end", (PyCFunction)faststat_Stats_end, METH_VARARGS, "add a duration data point, whose start time is passed"},
+    {"tick", (PyCFunction)faststat_Stats_tick, METH_NOARGS, "add an interval data point between now and the last tick"},
     {"get_percentiles", (PyCFunction)faststat_Stats_get_percentiles, METH_NOARGS, 
                 "construct percentiles dictionary"},
     {"get_buckets", (PyCFunction)faststat_Stats_get_buckets, METH_NOARGS,

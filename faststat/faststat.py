@@ -125,20 +125,23 @@ class PyStats(object):
                 p[1] += step * (d + 2.0 * p[0] - 1.0)
 
 
+class PyInterval(object):
+    pass  # TODO
+
+
+class PyDuration(object):
+    pass  # TODO:
+
+
 try:
     import _faststat
 
     # keep buckets for intervals in size from 100ns to ~14 hours
-    INTERVAL_BUCKETS = sum( 
-        [(1*10**-x, 2*10**-x, 5*10**-x) for x in (7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4)], ()) 
+    TIME_BUCKETS = sum( 
+        [(1*10**-x, 2*10**-x, 5*10**-x) for x in (7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4)], ())
 
-    class CStats(object):
-        def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
-            interval = _faststat.Stats(INTERVAL_BUCKETS, lastN, DEFAULT_PERCENTILES, None)
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, interval)
-            self.add = self._stats.add
-            self.interval = CInterval(self._stats.interval)
-
+    class _BaseStats(object):
+        'base class to avoid repeating code'
         @property
         def variance(self):
             if self.n < 2:
@@ -165,41 +168,55 @@ try:
         def buckets(self):
             return self.get_buckets()
 
-        def __getattr__(self, name):
-            return getattr(self._stats, name)
 
-    class CInterval(object):
+    class CStats(_BaseStats):
         '''
-        Intervals are expected to be expovariate.
-        kurtosis and skewness are radically incorrect, so do not expose them.
+        Call add(value) to add a data point.
         '''
-        def __init__(self, _stats):
-            self._stats = _stats
-
-        @property
-        def variance(self):
-            if self.n < 2:
-                return float("nan")
-            return self.m2 / (self.n - 1)
-
-        @property
-        def lambd(self):
-            return 1 / self.mean
-
-        @property
-        def percentiles(self):
-            return self.get_percentiles()
-
-        @property
-        def buckets(self):
-            return self.get_buckets()
+        def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
+            self.interval = CInterval()
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats)
+            self.add = self._stats.add
 
         def __getattr__(self, name):
-            return getattr(self._stats, name)
+            if name not in ("tick", "end"):
+                return getattr(self._stats, name)
+
+    class CInterval(_BaseStats):
+        '''
+        Call tick() to register occurrences.
+        Note that calling tick() N times results in N-1 data points.
+        '''
+        def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, None)
+            self.tick = self._stats.tick
+
+        def __getattr__(self, name):
+            if name not in ("add", "end"):
+                return getattr(self._stats, name)
+
+    class CDuration(_BaseStats):
+        '''
+        Call end(start_time_nanos) to add a data point.
+        '''
+        def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
+            self.interval = CInterval()
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats)
+            self.end = self._stats.end
+
+        def __getattr__(self, name):
+            if name not in ("add", "tick"):
+                return getattr(self._stats, name)
 
     Stats = CStats
+    Interval = CInterval
+    Duration = CDuration
     nanotime = _faststat.nanotime
 
 except ImportError:
     CStats = None
+    CInterval = None
+    CDuration = None
     Stats = PyStats
+    Interval = PyInterval
+    Duration = PyDuration
