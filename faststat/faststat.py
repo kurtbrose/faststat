@@ -138,7 +138,7 @@ try:
 
     # keep buckets for intervals in size from 100ns to ~14 hours
     TIME_BUCKETS = sum( 
-        [(1*10**-x, 2*10**-x, 5*10**-x) for x in (7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4)], ())
+        [(1*10**x, 2*10**x, 5*10**x) for x in range(2, 13)], ())
 
     class _BaseStats(object):
         'base class to avoid repeating code'
