@@ -52,35 +52,38 @@ static unsigned long long nanotime() {
 typedef struct {
     unsigned short percentile;  //divide by 0xFFFF to get a float between 0 and 1
     double val;  //estimate of current percentile value
-    unsigned int n;  //estimate of how many values were less than this
-} faststat_P2Percentile;
+    double n;  //estimate of how many values were less than this
+} faststat_P2Percentile;  // 2 + 8 + 8 = 18 (probably 20 with padding)
 
 
 typedef struct {
     float max;
-    unsigned int count;
-} faststat_Bucket;
+    double count;
+} faststat_Bucket;  // 8
 
 
 typedef struct {
     double value;
+    double weight;
     unsigned long long nanotime;
-} faststat_PrevSample;
+} faststat_PrevSample;  // 24
 
 // for representing a normally distributed variable
 typedef struct faststat_Stats_struct {
     PyObject_HEAD
-    unsigned long long n;
-    double mean, min, max, m2, m3, m4;
-    unsigned long long mintime, maxtime, lasttime;
-    unsigned int num_percentiles;
-    faststat_P2Percentile *percentiles;
-    unsigned int num_buckets;
-    faststat_Bucket *buckets;
-    unsigned int num_prev;
-    faststat_PrevSample *lastN;
-    struct faststat_Stats_struct *interval;
-} faststat_Stats;
+    unsigned long long n;  // 8
+    double total_weight;  // 8
+    double mean, min, max, m2, m3, m4;  // 6 * 8 = 48
+    unsigned long long mintime, maxtime, lasttime;  // 3 * 8 = 24
+    unsigned int num_percentiles;  // 4
+    faststat_P2Percentile *percentiles;  // n * 20
+    unsigned int num_buckets;  // 4
+    faststat_Bucket *buckets;  // m * 8
+    unsigned int num_prev;  // 4
+    faststat_PrevSample *lastN;  // p * 16
+    struct faststat_Stats_struct *interval;  // x2
+} faststat_Stats;  // total = 2 * (8 + 8 + 48 + 24 + 4 + 20n + 4 + 8m + 4 + 16p)
+// plausible size estimate: 3k !!  TODO: prioritize memory usage, make size reporting function
 
 /*
 typedef struct {
@@ -116,6 +119,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
     if(self != NULL) {
         self->interval = NULL;
         self->n = 0;
+        self->total_weight = 0;
         self->mean = self->m2 = self->m3 = self->m4 = self->min = self->max = 0;
         self->mintime = self->maxtime = self->lasttime = 0;
         self->num_percentiles = num_percentiles;
@@ -130,7 +134,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
                 temp = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(percentiles, i));
                 self->percentiles[i].percentile = (unsigned short)(temp * 0x10000);
                 self->percentiles[i].val = 0;
-                self->percentiles[i].n = i + 1;
+                self->percentiles[i].n = 0;
             }
         } else {
             self->percentiles = NULL;
@@ -213,41 +217,42 @@ static void _update_moments(faststat_Stats *self, double x) {
 }
 
 
+#define MIN_DIFF (1.001)
+#define NOT_TOO_CLOSE(larger, smaller) (fabs((larger) / (smaller)) > MIN_DIFF)
+
+
 //helper for _update_percentiles
 static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
-                            double r_v, double r_n, unsigned int n) {
-    int d;
-    double percentile, new_val, c_v, c_n, diff;
+                            double r_v, double r_n, double total_weight) {
+    double percentile, new_val, c_v, c_n, diff, new_n;
     percentile = ((double)cur->percentile) / 0x10000;
     c_n = cur->n;
-    diff = (n - 1) * percentile + 1 - c_n;
-    // clamp d at +/- 1
-    if(diff >= 1) {
-        d = 1;
-    } else if(diff <= -1) {
-        d = -1;
-    } else {
-        return;
+    new_n = total_weight * percentile;
+    if(! ( NOT_TOO_CLOSE(new_n, c_n) || NOT_TOO_CLOSE(c_n, new_n) ) ) {
+        return; // avoid massive cancellation when computing difference
     }
+    diff = new_n - c_n;
+
     c_v = cur->val;
-    if(l_n < c_n + d && c_n + d < r_n) {  // try updating estimate with parabolic
-        new_val = c_v + (d / (r_n - l_n)) * ( 
-            (c_n - l_n + d) * (r_v - c_v) / (r_n - c_n) +
-            (r_n - c_n - d) * (c_v - l_v) / (c_n - l_n));
-        if(l_v >= new_val || r_v <= new_val) {  // fall back on linear
-            if(d == 1) {
-                new_val = c_v + (r_v - c_v) / (r_n - c_n);
-            } else {  // d == -1
-                new_val = c_v - (l_v - c_v) / (l_n - c_n);
-            }
+    if( NOT_TOO_CLOSE(c_n + diff, l_n) && NOT_TOO_CLOSE(r_n, c_n + diff)) {  // try updating estimate with parabolic
+        new_val = c_v + (diff / (r_n - l_n)) * ( 
+            (c_n - l_n + diff) * (r_v - c_v) / (r_n - c_n) +
+            (r_n - c_n - diff) * (c_v - l_v) / (c_n - l_n));
+        if( NOT_TOO_CLOSE(new_val, l_v) || NOT_TOO_CLOSE(r_v, new_val)) {  // fall back on linear
+            new_val += c_v + diff * (r_v - c_v) / (r_n - c_n);
         }
-        cur->val = new_val;
-        cur->n += d;
+        printf("val: %f -> %f  ; n: %f -> %f\n", cur->val, new_val, cur->n, new_n);
+        if(new_val != new_val) {
+
+        } else {
+            cur->val = new_val;
+            cur->n = new_n;
+        }
     }
 }
 
 
-static void _insert_percentile_sorted(faststat_Stats *self, double x) {
+static void _insert_percentile_sorted(faststat_Stats *self, double x, double weight) {
     int num, i;
     double tmp;
     num = self->n < self->num_percentiles ? self->n : self->num_percentiles;
@@ -256,33 +261,53 @@ static void _insert_percentile_sorted(faststat_Stats *self, double x) {
             tmp = x;
             x = self->percentiles[i].val;
             self->percentiles[i].val = tmp;
+            tmp = weight;
+            weight = self->percentiles[i].n;
+            self->percentiles[i].n = tmp;
         }
     }
     self->percentiles[num-1].val = x;
+    self->percentiles[num-1].n = weight;
+}
+
+
+static void _init_weights(faststat_Stats *self) {
+    int i;
+    double sofar;
+    sofar = 0;
+    for(i = 0; i < self->num_percentiles; i++) {
+        sofar += self->percentiles[i].n;
+        self->percentiles[i].n += sofar;
+    }
 }
 
 
 //update percentiles using piece-wise parametric algorithm
-static void _update_percentiles(faststat_Stats *self, double x) {
+static void _update_percentiles(faststat_Stats *self, double x, double weight) {
     unsigned int i;
     //double percentile; //TODO: remove me
     faststat_P2Percentile *right, *left, *cur, *prev, *nxt;
     right = &(self->percentiles[self->num_percentiles-1]);
     left = &(self->percentiles[0]);
-    if(!(right->n < self->n) ) { // just insert until self->n > self->num_percentiles
-        _insert_percentile_sorted(self, x);
+    if( self->n <= self->num_percentiles ) { // just insert until self->n > self->num_percentiles
+        _insert_percentile_sorted(self, x, weight);
+        if( self->n == self->num_percentiles) {
+            _init_weights(self);
+        }
         return;
     }
     //right-most is stopping case; handle first
-    if(x < right->val && right->n + 1 < self->n) {
-        right->n++;
+    if(x < right->val && NOT_TOO_CLOSE(self->total_weight, right->n + weight)) {
+        printf("++++");
+        right->n += weight;
     }
     //handle the rest of the points
     prev = right;
     for(i = self->num_percentiles-2; ; i--) {
         cur = &(self->percentiles[i]);
-        if(x < cur->val && cur->n + 1 < prev->n) {
-            cur->n++;
+        if(x < cur->val && NOT_TOO_CLOSE(prev->n, cur->n + weight)) {
+            printf("++++");
+            cur->n += weight;
         }
         prev = cur;
         if(i == 0) { //making i unsigned fixes some warnings
@@ -291,15 +316,15 @@ static void _update_percentiles(faststat_Stats *self, double x) {
     }
     //left-most point is a special case
     nxt = &(self->percentiles[1]);
-    _p2_update_point(self->min, 0, left, nxt->val, nxt->n, self->n);
+    _p2_update_point(self->min, 0, left, nxt->val, nxt->n, self->total_weight);
     cur = left;
     for(i=1; i < self->num_percentiles - 1; i++) {
         prev = cur;
         cur = nxt;
         nxt = &(self->percentiles[i+1]);
-        _p2_update_point(prev->val, prev->n, cur, nxt->val, nxt->n, self->n);
+        _p2_update_point(prev->val, prev->n, cur, nxt->val, nxt->n, self->total_weight);
     }
-    _p2_update_point(cur->val, cur->n, right, self->max, self->n, self->n);
+    _p2_update_point(cur->val, cur->n, right, self->max, self->n, self->total_weight);
 } 
 
 
@@ -327,6 +352,7 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
     //update extremely basic values: number, min, and max
     self->lasttime = t;
     self->n++;
+    self->total_weight += 1.0;
     if(self->n == 1) {
         self->min = self->max = x;
         self->mintime = self->maxtime = self->lasttime;
@@ -340,7 +366,7 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
         self->max = x;
     }
     _update_moments(self, x);
-    _update_percentiles(self, x);
+    _update_percentiles(self, x, 1.0);
     _update_buckets(self, x);
     _update_lastN(self, x);
 }
