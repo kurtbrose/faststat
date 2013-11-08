@@ -49,10 +49,11 @@ class Sample(object):
         self.num_vals += 1
 
 DEFAULT_PERCENTILES = (0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
+EXPO_AVGS = (1.0/2, 1.0/4, 1.0/8, 1.0/16, 1.0/32, 1.0/64)
 
 
 class PyStats(object):
-    def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
+    def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES, expo_avgs=()):
         self.n = float(0)
         self.mean = float(0)
         # second, third, fourth moments
@@ -64,6 +65,7 @@ class PyStats(object):
         self.most_recent = collections.deque()
         self.lastN = lastN
         self.percentiles = [[p, 0] for p in percentiles]
+        self.expo_avgs = dict(zip(expo_avgs, [0]*len(expo_avgs)))
 
     @property
     def variance(self):
@@ -123,6 +125,9 @@ class PyStats(object):
             for p in self.percentiles:
                 d = 1 if x - p[1] > 0 else -1
                 p[1] += step * (d + 2.0 * p[0] - 1.0)
+        ### 5- update exponential weighted averages
+        for alpha, val in self.expo_avgs.items():
+            self.expo_avgs[alpha] = x * alpha + val * (1 - alpha)
 
 
 class PyInterval(object):
@@ -168,6 +173,24 @@ try:
         def buckets(self):
             return self.get_buckets()
 
+        @property
+        def window_median(self):
+            if self.num_prev:
+                prev = sorted([self.get_prev(i)[1] for i in range(self.num_prev)])
+                return prev[len(prev)/2]
+
+        @property
+        def expo_avgs(self):
+            return self.get_expo_avgs()
+
+        @property
+        def lag_avgs(self):
+            if not self.interval:
+                return
+            interval = self.interval.mean
+            return dict([(interval/alpha, val) 
+                for alpha, val in self.get_expo_avgs().items()])
+
 
     class CStats(_BaseStats):
         '''
@@ -175,7 +198,7 @@ try:
         '''
         def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
             self.interval = CInterval()
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats)
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats, EXPO_AVGS)
             self.add = self._stats.add
 
         def __getattr__(self, name):
@@ -188,7 +211,7 @@ try:
         Note that calling tick() N times results in N-1 data points.
         '''
         def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, None)
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, None, ())
             self.tick = self._stats.tick
 
         def __getattr__(self, name):
@@ -201,7 +224,7 @@ try:
         '''
         def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
             self.interval = CInterval()
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats)
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats, EXPO_AVGS)
             self.end = self._stats.end
 
         def __getattr__(self, name):

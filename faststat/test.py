@@ -52,7 +52,7 @@ def online_kurtosis(data):
 
 
 def test(py=False, sample=False):
-    random.seed(10)  # make test repeatable
+    random.seed(103)  # make test repeatable
     data = [random.normalvariate(1.0, 1.0) for i in range(int(1e6))]
     if py:
         stats = PyStats()
@@ -68,6 +68,8 @@ def test(py=False, sample=False):
     print "skewness (should be 0)", stats.skewness
     print "max, min, mintime, maxtime", stats.max, stats.min, stats.mintime, stats.maxtime
     print "m2, m3, m4", stats.m2, stats.m3, stats.m4
+    print "expo_avgs (should be 1)", stats.expo_avgs
+
 
 
 def compare():

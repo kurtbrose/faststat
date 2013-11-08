@@ -67,6 +67,13 @@ typedef struct {
     unsigned long long nanotime;
 } faststat_PrevSample;
 
+// represents an exponential moving average
+// aka a low pass filter, infinite impulse response filter
+typedef struct {
+    double val;
+    double alpha;
+} faststat_ExpoAvg;
+
 // for representing a normally distributed variable
 typedef struct faststat_Stats_struct {
     PyObject_HEAD
@@ -77,6 +84,9 @@ typedef struct faststat_Stats_struct {
     faststat_P2Percentile *percentiles;
     unsigned int num_buckets;
     faststat_Bucket *buckets;
+    unsigned int num_expo_avgs;
+    faststat_ExpoAvg *expo_avgs;
+    double window_avg;
     unsigned int num_prev;
     faststat_PrevSample *lastN;
     struct faststat_Stats_struct *interval;
@@ -90,27 +100,29 @@ typedef struct {
 } faststat_StatsGroup;
 */
 
-char* NEW_ARGS[5] = {"buckets", "lastN", "percentiles", "interval", NULL};
+char* NEW_ARGS[6] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", NULL};
 
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
-    PyObject *buckets, *percentiles, *interval;
-    int num_prev, num_buckets, num_percentiles;
+    PyObject *buckets, *percentiles, *interval, *expo_avgs;
+    int num_prev, num_buckets, num_percentiles, num_expo_avgs;
     int i;
     double temp;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOO", NEW_ARGS, 
-                                 &buckets, &num_prev, &percentiles, &interval)) {
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOOO", NEW_ARGS, 
+                                 &buckets, &num_prev, &percentiles, &interval, &expo_avgs)) {
         return NULL;
     }
 
     buckets = PySequence_Fast(buckets, "expected a sequence");
     percentiles = PySequence_Fast(percentiles, "expected a sequence");
-    if(!buckets || !percentiles) { // TODO: decref on buckets and percentiles
+    expo_avgs = PySequence_Fast(expo_avgs, "expected a sequence");
+    if(!buckets || !percentiles || !expo_avgs) { // TODO: decref on buckets and percentiles
         return NULL;
     }
     num_buckets = (int)PySequence_Fast_GET_SIZE(buckets);
     num_percentiles = (int)PySequence_Fast_GET_SIZE(percentiles);
+    num_expo_avgs = (int)PySequence_Fast_GET_SIZE(expo_avgs);
 
     self = (faststat_Stats*)type->tp_alloc(type, 0);
     if(self != NULL) {
@@ -145,6 +157,16 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
             }
         } else {
             self->buckets = NULL;
+        }
+        self->num_expo_avgs = num_expo_avgs;
+        if(num_expo_avgs) {
+            self->expo_avgs = PyMem_New(faststat_ExpoAvg, num_expo_avgs);
+            for(i=0; i<num_expo_avgs; i++) {
+                self->expo_avgs[i].val = 0;
+                self->expo_avgs[i].alpha = (double)PyFloat_AsDouble(PySequence_Fast_GET_ITEM(expo_avgs, i));
+            }
+        } else {
+            self->expo_avgs = NULL;
         }
         self->num_prev = num_prev;
         if(num_prev) {
@@ -190,6 +212,10 @@ static PyMemberDef faststat_Stats_members[] = {
     {"m3", T_DOUBLE, offsetof(faststat_Stats, m3), READONLY, "m3"},
     {"m4", T_DOUBLE, offsetof(faststat_Stats, m4), READONLY, "m4"},
     {"interval", T_OBJECT, offsetof(faststat_Stats, interval), READONLY, "interval"},
+    {"window_avg", T_DOUBLE, offsetof(faststat_Stats, window_avg), READONLY, 
+        "average of stored most recent data points"},
+    {"num_prev", T_ULONG, offsetof(faststat_Stats, num_prev), READONLY,
+        "number of most recent data points stored (accessible via get_prev() )"},
     {NULL}
 };
 
@@ -318,8 +344,23 @@ static void _update_lastN(faststat_Stats *self, double x) {
     unsigned int offset;
     if(self->num_prev == 0) { return; }
     offset = (self->n - 1) % self->num_prev;
+    self->window_avg -= self->lastN[offset].value / (1.0 * self->num_prev);
+    self->window_avg += x / (1.0 * self->num_prev);
     self->lastN[offset].value = x;
     self->lastN[offset].nanotime = self->lasttime;
+}
+
+
+static void _update_expo_avgs(faststat_Stats *self, double x) {
+    unsigned int i;
+    double val, alpha;
+    for(i = 0; i < self->num_expo_avgs; i++) {
+        val = self->expo_avgs[i].val;
+        alpha = self->expo_avgs[i].alpha;
+        // this equation ensures no "gain"
+        val = x * alpha + val * (1 - alpha);
+        self->expo_avgs[i].val = val;
+    }
 }
 
 
@@ -342,6 +383,7 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
     _update_moments(self, x);
     _update_percentiles(self, x);
     _update_buckets(self, x);
+    _update_expo_avgs(self, x);
     _update_lastN(self, x);
 }
 
@@ -438,6 +480,22 @@ static PyObject* faststat_Stats_get_buckets(faststat_Stats* self, PyObject *args
 }
 
 
+static PyObject* faststat_Stats_get_expoavgs(faststat_Stats *self, PyObject *args) {
+    PyObject *b_dict;
+    faststat_ExpoAvg *cur;
+    unsigned int i;
+    b_dict = PyDict_New();
+    for(i = 0; i < self->num_expo_avgs; i++) {
+        cur = &(self->expo_avgs[i]);
+        PyDict_SetItem(b_dict,
+            PyFloat_FromDouble(cur->alpha),
+            PyFloat_FromDouble(cur->val));
+    }
+    Py_INCREF(b_dict);
+    return b_dict;
+}
+
+
 static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
     int offset;
     double val;
@@ -472,14 +530,18 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
 
 static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
-    {"end", (PyCFunction)faststat_Stats_end, METH_VARARGS, "add a duration data point, whose start time is passed"},
-    {"tick", (PyCFunction)faststat_Stats_tick, METH_NOARGS, "add an interval data point between now and the last tick"},
+    {"end", (PyCFunction)faststat_Stats_end, METH_VARARGS, 
+        "add a duration data point, whose start time is passed"},
+    {"tick", (PyCFunction)faststat_Stats_tick, METH_NOARGS, 
+        "add an interval data point between now and the last tick"},
     {"get_percentiles", (PyCFunction)faststat_Stats_get_percentiles, METH_NOARGS, 
-                "construct percentiles dictionary"},
+        "construct percentiles dictionary"},
     {"get_buckets", (PyCFunction)faststat_Stats_get_buckets, METH_NOARGS,
-                "construct buckets dictionary"},
+        "construct buckets dictionary"},
+    {"get_expo_avgs", (PyCFunction)faststat_Stats_get_expoavgs, METH_NOARGS,
+        "get a dictionary of decay rates to previous averages"},
     {"get_prev", (PyCFunction)faststat_Stats_get_prev, METH_VARARGS,
-                "get the nth previous sample"},
+        "get the nth previous sample"},
     {NULL}
 };
 
