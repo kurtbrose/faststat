@@ -191,6 +191,9 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
     if(self->buckets) {
         PyMem_Del(self->buckets);
     }
+    if(self->expo_avgs) {
+        PyMem_Del(self->expo_avgs);
+    }
     if(self->lastN) {
         PyMem_Del(self->lastN);
     }
