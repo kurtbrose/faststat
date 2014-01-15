@@ -154,6 +154,11 @@ try:
             return self.m2 / (self.n - 1)
 
         @property
+        def trimean(self):
+            p = self.get_percentiles()
+            return (p[0.25] + 2 * p[0.5] + p[0.75]) / 4
+
+        @property
         def skewness(self):
             if not self.m2:
                 return float("nan")
