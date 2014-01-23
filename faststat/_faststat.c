@@ -12,7 +12,7 @@
 #define DELTA_EPOCH_IN_SECS  11644473600ULL
 //difference between Jan 1, 1601 and Jan 1, 1970 (unix epoch)
 
-static unsigned long long nanotime() {
+static unsigned long long nanotime(void) {
     FILETIME ft;
     ULARGE_INTEGER result;
     GetSystemTimeAsFileTime(&ft); //returns time in 100ns intervals since Jan 1, 1601
@@ -26,7 +26,7 @@ static unsigned long long nanotime() {
 //linux has clock_gettime(CLOCK_REALTIME) which is ns since epoch -- perfect
 #include <time.h>
 
-static unsigned long long nanotime() {
+static unsigned long long nanotime(void) {
     struct timespec ts;
     if(clock_gettime(CLOCK_REALTIME, &ts) == -1) {
         return 0;
@@ -38,7 +38,7 @@ static unsigned long long nanotime() {
 //for those oddballs like OSX and BSD, fall back on gettimeofday() which is at least microseconds
 #include <time.h>
 
-static unsigned long long nanotime() {
+static unsigned long long nanotime(void) {
     struct timeval tv;
     if(gettimeofday(&tv, NULL) == -1) {
         return 0;
@@ -457,7 +457,6 @@ static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *
             PyFloat_FromDouble(cur_val), 
             PyFloat_FromDouble(cur->val));
     }
-    Py_INCREF(p_dict);
     return p_dict;
 }
 
@@ -478,7 +477,6 @@ static PyObject* faststat_Stats_get_buckets(faststat_Stats* self, PyObject *args
             PyLong_FromUnsignedLongLong(cur->count));
     }
     PyDict_SetItem(b_dict, Py_None, PyLong_FromUnsignedLongLong(leftover));
-    Py_INCREF(b_dict);
     return b_dict;
 }
 
@@ -494,7 +492,6 @@ static PyObject* faststat_Stats_get_expoavgs(faststat_Stats *self, PyObject *arg
             PyFloat_FromDouble(cur->alpha),
             PyFloat_FromDouble(cur->val));
     }
-    Py_INCREF(b_dict);
     return b_dict;
 }
 
@@ -519,9 +516,6 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
         if(pyval != NULL && pytime != NULL) {
             tuple = PyTuple_Pack(2, pytime, pyval);
             if(tuple != NULL) {
-                Py_INCREF(pyval);
-                Py_INCREF(pytime);
-                Py_INCREF(tuple);
                 return tuple;
             }
         }
@@ -595,7 +589,6 @@ static PyTypeObject faststat_StatsType = {
 PyObject* pynanotime(PyObject* args) {
     PyObject *result;
     result = PyLong_FromUnsignedLongLong(nanotime());
-    Py_INCREF(result);
     return result;
 }
 
