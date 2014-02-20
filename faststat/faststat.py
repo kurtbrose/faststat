@@ -23,6 +23,7 @@ more values added than stats queries made.
 '''
 import array
 import random
+import math
 import collections
 import time
 
@@ -196,6 +197,16 @@ try:
             return dict([(interval/alpha, val) 
                 for alpha, val in self.get_expo_avgs().items()])
 
+        def __repr__(self):
+            p = self.percentiles
+            if self.n < len(p):
+                quartiles = "(n too small)"
+            else:
+                quartiles = (_sigfigs(p.get(0.25, -1)), 
+                    _sigfigs(p.get(0.5, -1)), _sigfigs(p.get(0.75, -1)))
+            return '<faststat.{0} n={1} mean={2} quartiles={3}>'.format(
+                type(self).__name__, self.n, _sigfigs(self.mean), quartiles)
+
 
     class CStats(_BaseStats):
         '''
@@ -248,3 +259,11 @@ except ImportError:
     Stats = PyStats
     Interval = PyInterval
     Duration = PyDuration
+
+
+def _sigfigs(n, sigfigs=3):
+    'helper function to round a number to significant figures'
+    n = float(n)
+    if n == 0 or math.isnan(n):  # avoid math domain errors
+        return n
+    return round(n, -int(math.floor(math.log10(abs(n))) - sigfigs + 1))
