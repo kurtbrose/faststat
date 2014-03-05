@@ -139,6 +139,15 @@ class PyDuration(object):
     pass  # TODO:
 
 
+# keep buckets for intervals in size from 100ns to ~14 hours
+TIME_BUCKETS = sum( 
+    [(1*10**x, 2*10**x, 5*10**x) for x in range(2, 13)], ())
+# useful buckets for unsigned integers up to 64 bits
+UINT_BUCKETS = (1, 2, 3, 4, 5, 6, 7, 8, 9) + sum(
+    [(1*10**x, 2*10**x, 5*10**x) for x in range(1, 20)], ())
+# useful buckets for signed integers up to 64 bits
+INT_BUCKETS = tuple(reversed([-e for e in UINT_BUCKETS[:-3]])) + (0,) + UINT_BUCKETS[:-3]
+
 try:
     import _faststat
 
@@ -260,16 +269,6 @@ except ImportError:
     Stats = PyStats
     Interval = PyInterval
     Duration = PyDuration
-
-
-# keep buckets for intervals in size from 100ns to ~14 hours
-TIME_BUCKETS = sum( 
-    [(1*10**x, 2*10**x, 5*10**x) for x in range(2, 13)], ())
-# useful buckets for unsigned integers up to 64 bits
-UINT_BUCKETS = (1, 2, 3, 4, 5, 6, 7, 8, 9) + sum(
-    [(1*10**x, 2*10**x, 5*10**x) for x in range(1, 20)], ())
-# useful buckets for signed integers up to 64 bits
-INT_BUCKETS = tuple(reversed([-e for e in UINT_BUCKETS[:-3]])) + (0,) + UINT_BUCKETS[:-3]
 
 
 def _sigfigs(n, sigfigs=3):
