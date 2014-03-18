@@ -74,6 +74,16 @@ typedef struct {
     double alpha;
 } faststat_ExpoAvg;
 
+
+// represents a count for a given interval,
+// aligned on unix epoch
+typedef struct {
+    unsigned short num_windows;  // number of counts
+    unsigned long long window_size_nanosecs;  // size of each window in seconds
+    unsigned int *counts;  // counts for the previous num_windows intervals
+} faststat_WindowCount;
+
+
 // for representing a normally distributed variable
 typedef struct faststat_Stats_struct {
     PyObject_HEAD
@@ -90,6 +100,10 @@ typedef struct faststat_Stats_struct {
     double window_avg;
     unsigned int num_prev;
     faststat_PrevSample *lastN;
+    unsigned int num_window_counts;
+    //window counts must be sorted by window_size, to
+    //make handling code cleaner/smaller
+    faststat_WindowCount *window_counts;
     struct faststat_Stats_struct *interval;
 } faststat_Stats;
 
@@ -372,6 +386,37 @@ static void _update_expo_avgs(faststat_Stats *self, double x) {
     }
 }
 
+// re-zero all of the windows which have been "missed" between self->lasttime and t
+static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
+    faststat_WindowCount *cur;
+    int i, j, last_window, cur_window;
+    for(i = 0; i < self->num_window_counts; i++) {
+        cur = self->window_counts[i];
+        last_window = self->lasttime / cur->window_size_nanosecs;
+        cur_window = t / cur->window_size_nanosecs
+        if(last_window == cur_window) {
+            break;  // because window_counts are sorted by window_size_nanosecs,
+        }           // the next window cannot miss unless the current one does
+        for(j = last_window + 1; j <= cur_window; j++) {
+            cur->counts[j % cur->num_windows] = 0;
+        }  // zero out all the "missed" windows
+    }
+}
+
+
+static void _update_window_counts(faststat_Stats *self, unsigned long long t) {
+    faststat_WindowCount *cur;
+    int i, j, last_window, cur_window;
+    _rezero_window_counts(self, t);
+    // step 2 -- increment current counts
+    for(i = 0; i < self->num_window_counts; i++) {
+        cur = self->window_counts[i];
+        // use the current time as the index into the circular array to save some memory
+        cur_count = (t / cur->window_size_nanosecs) % cur->num_windows;
+        ++(cur->counts[cur_count]);
+    }
+}
+
 
 static void _add(faststat_Stats *self, double x, unsigned long long t) {
     //update extremely basic values: number, min, and max
@@ -541,6 +586,11 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
 }
 
 
+static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject *args) {
+    
+}
+
+
 static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
     {"end", (PyCFunction)faststat_Stats_end, METH_VARARGS, 
@@ -555,6 +605,8 @@ static PyMethodDef faststat_Stats_methods[] = {
         "get a dictionary of decay rates to previous averages"},
     {"get_prev", (PyCFunction)faststat_Stats_get_prev, METH_VARARGS,
         "get the nth previous sample"},
+    {"get_window_counts", (PyCFunction)faststat_Stats_get_window_counts, METH_NOARGS,
+        "get a dictionary of window intervals to window counts"},
     {NULL}
 };
 
