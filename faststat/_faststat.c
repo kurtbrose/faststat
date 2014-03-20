@@ -79,6 +79,7 @@ typedef struct faststat_Stats_struct {
     PyObject_HEAD
     unsigned long long n;
     double mean, min, max, m2, m3, m4;
+    double sum_of_logs, sum_of_inv;  // for geometric and harmonic mean
     unsigned long long mintime, maxtime, lasttime;
     unsigned int num_percentiles;
     faststat_P2Percentile *percentiles;
@@ -129,6 +130,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         self->interval = NULL;
         self->n = 0;
         self->mean = self->m2 = self->m3 = self->m4 = self->min = self->max = 0;
+        self->sum_of_logs = self->sum_of_inv = 0;
         self->mintime = self->maxtime = self->lasttime = 0;
         self->num_percentiles = num_percentiles;
         if(interval != Py_None ) {
@@ -205,6 +207,10 @@ static PyMemberDef faststat_Stats_members[] = {
     {"mean", T_DOUBLE, offsetof(faststat_Stats, mean), READONLY, "mean"},
     {"min", T_DOUBLE, offsetof(faststat_Stats, min), READONLY, "min"},
     {"max", T_DOUBLE, offsetof(faststat_Stats, max), READONLY, "max"},
+    {"sum_of_logs", T_DOUBLE, offsetof(faststat_Stats, sum_of_logs), READONLY, 
+        "sum of logs of values, provided all values were positive definite, else NaN (userful for geometric mean)"},
+    {"sum_of_inv", T_DOUBLE, offsetof(faststat_Stats, sum_of_inv), READONLY,
+        "sum of inverses of values, provided all were positive definite, else NaN (useful for harmonic mean)"},    
     {"lasttime", T_ULONGLONG, offsetof(faststat_Stats, lasttime), READONLY,
                       "time (in nanoseconds since epoch) of last call to add"},
     {"mintime", T_ULONGLONG, offsetof(faststat_Stats, mintime), READONLY, 
@@ -383,6 +389,9 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
         self->maxtime = self->lasttime;
         self->max = x;
     }
+    // TODO: any platforms not support the NAN macro?
+    self->sum_of_logs += x > 0 ? log(x) : NAN;
+    self->sum_of_inv += x > 0 ? 1 / x : NAN;
     _update_moments(self, x);
     _update_percentiles(self, x);
     _update_buckets(self, x);
@@ -400,7 +409,14 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
     if(PyArg_ParseTuple(args, "d", &x)) {
         t = nanotime();
         if(self->interval && self->lasttime) {
-            _add(self->interval, (double)(t - self->lasttime), t);
+            unsigned long long interval;
+            interval = t - self->lasttime;
+            if(interval == 0) {
+                interval = 1;
+            }
+            // ensure interval is at least 1 nanosecond to not mess up
+            // harmonic and geometric mean (1 ns is noise on this scale)
+            _add(self->interval, (double)(interval), t);
         }
         _add(self, x, t);
     }

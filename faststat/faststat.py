@@ -185,6 +185,16 @@ try:
             return self.get_buckets()
 
         @property
+        def geometric_mean(self):
+            'nth root of product of data points'
+            return math.exp(self.sum_of_logs / self.n)
+
+        @property
+        def harmonic_mean(self):
+            'inverse of mean of inverses of data points'
+            return self.n / self.sum_of_inv
+
+        @property
         def window_median(self):
             if self.num_prev:
                 prev = sorted([self.get_prev(i)[1] for i in range(self.num_prev)])

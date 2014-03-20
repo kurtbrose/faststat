@@ -68,7 +68,11 @@ def test(py=False, sample=False):
     print "skewness (should be 0)", stats.skewness
     print "max, min, mintime, maxtime", stats.max, stats.min, stats.mintime, stats.maxtime
     print "m2, m3, m4", stats.m2, stats.m3, stats.m4
+    print "geometric_mean, harmonic mean", stats.geometric_mean, stats.harmonic_mean
+    print "interval.min, interval.geometric_mean, interval.harmonic_mean",
+    print stats.interval.min, stats.interval.geometric_mean, stats.interval.harmonic_mean
     print "expo_avgs (should be 1)", stats.expo_avgs
+    return stats
 
 
 
@@ -99,4 +103,4 @@ def compare():
 
 if __name__ == "__main__":
     test()
-    test(py=True)
+    #test(py=True)
