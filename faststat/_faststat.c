@@ -391,12 +391,17 @@ static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
     faststat_WindowCount *cur;
     int i, j, last_window, cur_window;
     for(i = 0; i < self->num_window_counts; i++) {
-        cur = self->window_counts[i];
+        cur = &(self->window_counts[i]);
         last_window = self->lasttime / cur->window_size_nanosecs;
-        cur_window = t / cur->window_size_nanosecs
+        cur_window = t / cur->window_size_nanosecs;
         if(last_window == cur_window) {
             break;  // because window_counts are sorted by window_size_nanosecs,
         }           // the next window cannot miss unless the current one does
+        if(cur_window - last_window >= cur->num_windows) {
+            memset(cur->counts, 0, sizeof(*cur->counts) * cur->num_windows);
+            continue;  // if the entire array is getting zero'd, just use memset
+        }
+        // TODO: convert this to a memset instead of a loop (perhaps)
         for(j = last_window + 1; j <= cur_window; j++) {
             cur->counts[j % cur->num_windows] = 0;
         }  // zero out all the "missed" windows
@@ -406,11 +411,11 @@ static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
 
 static void _update_window_counts(faststat_Stats *self, unsigned long long t) {
     faststat_WindowCount *cur;
-    int i, j, last_window, cur_window;
+    int i, j, cur_count;
     _rezero_window_counts(self, t);
     // step 2 -- increment current counts
     for(i = 0; i < self->num_window_counts; i++) {
-        cur = self->window_counts[i];
+        cur = &(self->window_counts[i]);
         // use the current time as the index into the circular array to save some memory
         cur_count = (t / cur->window_size_nanosecs) % cur->num_windows;
         ++(cur->counts[cur_count]);
