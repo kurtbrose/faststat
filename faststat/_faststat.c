@@ -215,7 +215,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
             }
             // allocate all of the window counts as one contiguous block
             self->window_counts[0].counts = PyMem_New(unsigned int, total);
-            memset(self->window_counts[i].counts, 0, sizeof(unsigned int) * total);
+            memset(self->window_counts[0].counts, 0, sizeof(unsigned int) * total);
             offset = self->window_counts[0].num_windows;
             for(i=1; i<num_window_counts; i++) {
                 self->window_counts[i].counts = self->window_counts[0].counts + offset;
