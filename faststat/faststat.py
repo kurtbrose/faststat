@@ -148,7 +148,12 @@ UINT_BUCKETS = (1, 2, 3, 4, 5, 6, 7, 8, 9) + sum(
 # useful buckets for signed integers up to 64 bits
 INT_BUCKETS = tuple(reversed([-e for e in UINT_BUCKETS[:-3]])) + (0,) + UINT_BUCKETS[:-3]
 
-WINDOW_COUNTS = None
+ONE_MIN_NS = int(10e9) * 60
+FIVE_MIN_NS = 5 * ONE_MIN_NS
+FIFTEEN_MIN_NS = 15 * ONE_MIN_NS
+ONE_HOUR_NS = 60 * ONE_MIN_NS
+
+WINDOW_COUNTS = [(5, ONE_MIN_NS), (3, FIVE_MIN_NS), (4, FIFTEEN_MIN_NS), (24, ONE_HOUR_NS)]
 
 try:
     import _faststat
@@ -235,8 +240,9 @@ try:
         Call add(value) to add a data point.
         '''
         def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
-            self.interval = CInterval()
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats, EXPO_AVGS)
+            self.interval = CInterval(window_counts=())
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, 
+                self.interval._stats, EXPO_AVGS, WINDOW_COUNTS)
             self.add = self._stats.add
 
         def __getattr__(self, name):
@@ -248,8 +254,9 @@ try:
         Call tick() to register occurrences.
         Note that calling tick() N times results in N-1 data points.
         '''
-        def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, None, ())
+        def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES,
+                window_counts=WINDOW_COUNTS):
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, None, (), window_counts)
             self.tick = self._stats.tick
 
         def __getattr__(self, name):
@@ -262,7 +269,8 @@ try:
         '''
         def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
             self.interval = CInterval()
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, self.interval._stats, EXPO_AVGS)
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, 
+                self.interval._stats, EXPO_AVGS, WINDOW_COUNTS)
             self.end = self._stats.end
 
         def __getattr__(self, name):

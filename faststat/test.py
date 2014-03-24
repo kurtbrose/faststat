@@ -72,6 +72,7 @@ def test(py=False, sample=False):
     print "interval.min, interval.geometric_mean, interval.harmonic_mean",
     print stats.interval.min, stats.interval.geometric_mean, stats.interval.harmonic_mean
     print "expo_avgs (should be 1)", stats.expo_avgs
+    print "window_counts", stats.get_window_counts()
     return stats
 
 
