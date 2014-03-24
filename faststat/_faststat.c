@@ -115,29 +115,32 @@ typedef struct {
 } faststat_StatsGroup;
 */
 
-char* NEW_ARGS[6] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", NULL};
+char* NEW_ARGS[7] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", "window_counts", NULL};
 
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
-    PyObject *buckets, *percentiles, *interval, *expo_avgs;
-    int num_prev, num_buckets, num_percentiles, num_expo_avgs;
-    int i;
+    PyObject *buckets, *percentiles, *interval, *expo_avgs, *window_counts, *cur;
+    int num_prev, num_buckets, num_percentiles, num_expo_avgs, num_window_counts;
+    int i, total, offset;
     double temp;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOOO", NEW_ARGS, 
-                                 &buckets, &num_prev, &percentiles, &interval, &expo_avgs)) {
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOOOO", NEW_ARGS, 
+            &buckets, &num_prev, &percentiles, &interval, &expo_avgs, &window_counts)) {
         return NULL;
     }
 
     buckets = PySequence_Fast(buckets, "expected a sequence");
     percentiles = PySequence_Fast(percentiles, "expected a sequence");
     expo_avgs = PySequence_Fast(expo_avgs, "expected a sequence");
-    if(!buckets || !percentiles || !expo_avgs) { // TODO: decref on buckets and percentiles
+    window_counts = PySequence_Fast(window_counts, "expected a sequence");
+    if(!buckets || !percentiles || !expo_avgs || !window_counts) { 
+        // TODO: decref on buckets and percentiles
         return NULL;
     }
     num_buckets = (int)PySequence_Fast_GET_SIZE(buckets);
     num_percentiles = (int)PySequence_Fast_GET_SIZE(percentiles);
     num_expo_avgs = (int)PySequence_Fast_GET_SIZE(expo_avgs);
+    num_window_counts = (int)PySequence_Fast_GET_SIZE(window_counts);
 
     self = (faststat_Stats*)type->tp_alloc(type, 0);
     if(self != NULL) {
@@ -194,6 +197,33 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         } else {
             self->lastN = NULL;
         }
+        self->num_window_counts = num_window_counts;
+        if(num_window_counts) {
+            self->window_counts = PyMem_New(faststat_WindowCount, num_window_counts);
+            PyList_Sort(window_counts);
+            total = 0;
+            for(i=0; i<num_window_counts; i++) {
+                cur = PySequence_Fast_GET_ITEM(window_counts, i);
+                if(!PyTuple_Check(cur)) {
+                    continue;
+                }
+                self->window_counts[i].num_windows = (unsigned short)PyLong_AsLong(
+                    PySequence_Fast_GET_ITEM(cur, 0));
+                self->window_counts[i].window_size_nanosecs = PyLong_AsUnsignedLongLong(
+                    PySequence_Fast_GET_ITEM(cur, 1));
+                total += self->window_counts[i].num_windows;
+            }
+            // allocate all of the window counts as one contiguous block
+            self->window_counts[0].counts = PyMem_New(unsigned int, total);
+            memset(self->window_counts[i].counts, 0, sizeof(unsigned int) * total);
+            offset = self->window_counts[0].num_windows;
+            for(i=1; i<num_window_counts; i++) {
+                self->window_counts[i].counts = self->window_counts[0].counts + offset;
+                offset += self->window_counts[i].num_windows;
+            }
+        } else {
+            self->window_counts = NULL;
+        }
     }
 
     return (PyObject*) self;
@@ -212,6 +242,11 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
     }
     if(self->lastN) {
         PyMem_Del(self->lastN);
+    }
+    if(self->window_counts) {
+        // see constructor; all window_counts are allocated as one chunk
+        PyMem_Del(self->window_counts[0].counts);
+        PyMem_Del(self->window_counts);
     }
 }
 
@@ -411,7 +446,7 @@ static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
 
 static void _update_window_counts(faststat_Stats *self, unsigned long long t) {
     faststat_WindowCount *cur;
-    int i, j, cur_count;
+    int i, cur_count;
     _rezero_window_counts(self, t);
     // step 2 -- increment current counts
     for(i = 0; i < self->num_window_counts; i++) {
@@ -447,6 +482,7 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
     _update_buckets(self, x);
     _update_expo_avgs(self, x);
     _update_lastN(self, x);
+    _update_window_counts(self, t);
 }
 
 
@@ -592,7 +628,29 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
 
 
 static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject *args) {
-    
+    unsigned long long t;
+    PyObject *window_count_dict, *cur_items;
+    faststat_WindowCount *cur;
+    unsigned int i, j, cur_window;
+    t = nanotime();
+    _rezero_window_counts(self, t);
+    window_count_dict = PyDict_New();
+    for(i = 0; i < self->num_window_counts; i++) {
+        cur = self->window_counts + i;
+        cur_items = PyTuple_New(cur->num_windows);
+        cur_window = t / cur->window_size_nanosecs;
+        for(j = 0; j < cur->num_windows; j++) {
+            PyTuple_SetItem(
+                cur_items, j, 
+                PyLong_FromUnsignedLong(
+                    cur->counts[(j + cur_window) % cur->num_windows]));
+        }
+        PyDict_SetItem(
+            window_count_dict,
+            PyLong_FromUnsignedLongLong(cur->window_size_nanosecs),
+            cur_items);
+    }
+    return window_count_dict;
 }
 
 
