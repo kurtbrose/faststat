@@ -148,7 +148,7 @@ UINT_BUCKETS = (1, 2, 3, 4, 5, 6, 7, 8, 9) + sum(
 # useful buckets for signed integers up to 64 bits
 INT_BUCKETS = tuple(reversed([-e for e in UINT_BUCKETS[:-3]])) + (0,) + UINT_BUCKETS[:-3]
 
-ONE_MIN_NS = int(10e9) * 60
+ONE_MIN_NS = int(60e9)
 FIVE_MIN_NS = 5 * ONE_MIN_NS
 FIFTEEN_MIN_NS = 15 * ONE_MIN_NS
 ONE_HOUR_NS = 60 * ONE_MIN_NS
