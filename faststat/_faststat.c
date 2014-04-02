@@ -216,10 +216,9 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
                 if(!PyTuple_Check(cur)) {
                     continue;
                 }
-                self->window_counts[i].num_windows = (unsigned short)PyLong_AsLong(
-                    PySequence_Fast_GET_ITEM(cur, 0));
-                self->window_counts[i].window_size_nanosecs = PyLong_AsUnsignedLongLong(
-                    PySequence_Fast_GET_ITEM(cur, 1));
+                PyArg_ParseTuple(cur, "HK",
+                    &(self->window_counts[i].num_windows),
+                    &(self->window_counts[i].window_size_nanosecs));
                 total += self->window_counts[i].num_windows;
             }
             // allocate all of the window counts as one contiguous block
@@ -233,6 +232,11 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         } else {
             self->window_counts = NULL;
         }
+    }
+
+    if(PyErr_Occurred()) {
+       Py_DECREF(self);
+       return NULL;
     }
 
     return (PyObject*) self;
