@@ -148,6 +148,10 @@ UINT_BUCKETS = (1, 2, 3, 4, 5, 6, 7, 8, 9) + sum(
 # useful buckets for signed integers up to 64 bits
 INT_BUCKETS = tuple(reversed([-e for e in UINT_BUCKETS[:-3]])) + (0,) + UINT_BUCKETS[:-3]
 
+DEFAULT_BUCKETS = (0, 1e-5, 1e-4, 1e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
+    10, 20, 50, 100, 200, 500, 1e3, 2e3, 5e3, 1e4, 1e5, 1e6)
+DEFAULT_BUCKETS = tuple(reversed([-e for e in DEFAULT_BUCKETS])) + (0,) + DEFAULT_BUCKETS
+
 ONE_MIN_NS = int(60e9)
 FIVE_MIN_NS = 5 * ONE_MIN_NS
 FIFTEEN_MIN_NS = 15 * ONE_MIN_NS
@@ -239,7 +243,7 @@ try:
         '''
         Call add(value) to add a data point.
         '''
-        def __init__(self, buckets=(), lastN=64, percentiles=DEFAULT_PERCENTILES):
+        def __init__(self, buckets=DEFAULT_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
             self.interval = CInterval(window_counts=())
             self._stats = _faststat.Stats(buckets, lastN, percentiles, 
                 self.interval._stats, EXPO_AVGS, WINDOW_COUNTS)
