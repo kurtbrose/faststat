@@ -49,7 +49,7 @@ class Sample(object):
                 self.sample[pos] = val
         self.num_vals += 1
 
-DEFAULT_PERCENTILES = (0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
+DEFAULT_PERCENTILES = (0.25, 0.50, 0.75, 0.90, 0.95, 0.99)
 EXPO_AVGS = (1.0/2, 1.0/4, 1.0/8, 1.0/16, 1.0/32, 1.0/64)
 
 
