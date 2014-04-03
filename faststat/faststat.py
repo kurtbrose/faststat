@@ -153,11 +153,9 @@ DEFAULT_BUCKETS = (0, 1e-5, 1e-4, 1e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1, 2, 3
 DEFAULT_BUCKETS = tuple(reversed([-e for e in DEFAULT_BUCKETS])) + (0,) + DEFAULT_BUCKETS
 
 ONE_MIN_NS = int(60e9)
-FIVE_MIN_NS = 5 * ONE_MIN_NS
-FIFTEEN_MIN_NS = 15 * ONE_MIN_NS
 ONE_HOUR_NS = 60 * ONE_MIN_NS
 
-WINDOW_COUNTS = [(8, ONE_MIN_NS), (4, FIVE_MIN_NS), (4, FIFTEEN_MIN_NS), (32, ONE_HOUR_NS)]
+WINDOW_COUNTS = [(64, ONE_MIN_NS), (32, ONE_HOUR_NS)]
 
 try:
     import _faststat
