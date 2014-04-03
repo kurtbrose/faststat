@@ -242,6 +242,7 @@ try:
         Call add(value) to add a data point.
         '''
         def __init__(self, buckets=DEFAULT_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
+            buckets = buckets + (float("inf"),)
             lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
             self.interval = CInterval(window_counts=())
             self._stats = _faststat.Stats(buckets, lastN, percentiles, 
@@ -259,6 +260,7 @@ try:
         '''
         def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES,
                 window_counts=WINDOW_COUNTS):
+            buckets = buckets + (float("inf"),)
             lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
             self._stats = _faststat.Stats(buckets, lastN, percentiles, None, (), window_counts)
             self.tick = self._stats.tick
@@ -272,6 +274,7 @@ try:
         Call end(start_time_nanos) to add a data point.
         '''
         def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES):
+            buckets = buckets + (float("inf"),)
             lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
             self.interval = CInterval()
             self._stats = _faststat.Stats(buckets, lastN, percentiles, 

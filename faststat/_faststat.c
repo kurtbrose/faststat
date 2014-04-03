@@ -103,7 +103,7 @@ typedef struct faststat_Stats_struct {
     unsigned int num_percentiles;
     faststat_P2Percentile *percentiles;
     unsigned int num_buckets;
-    faststat_Bucket *buckets;
+    faststat_Bucket *buckets; // last bucket MUST BE
     unsigned int num_expo_avgs;
     faststat_ExpoAvg *expo_avgs;
     double window_avg;
@@ -399,17 +399,20 @@ static void _update_percentiles(faststat_Stats *self, double x) {
     _p2_update_point(cur->val, cur->n, right, (double)self->max, (double)self->n, self->n);
 } 
 
+// be careful; if-condition must properly terminate when max == +inf, even for nan and +inf
+#define OFFSET(n)  if(!(x >= self->buckets[i+n].max)) { self->buckets[i+n].count++; break; } 
 
 static void _update_buckets(faststat_Stats *self, double x) {
     unsigned int i;
-    for(i=0; i < self->num_buckets; i++) {
-        if(x < self->buckets[i].max) {
-            self->buckets[i].count++;
-            break;
-        }
+    for(i=0; ; i += 16) {
+        OFFSET( 0) OFFSET( 1) OFFSET( 2) OFFSET( 3) 
+        OFFSET( 4) OFFSET( 5) OFFSET( 6) OFFSET( 7) 
+        OFFSET( 8) OFFSET( 9) OFFSET(10) OFFSET(11) 
+        OFFSET(12) OFFSET(13) OFFSET(14) OFFSET(15)
     }
 }
 
+#undef OFFSET
 
 static void _update_lastN(faststat_Stats *self, double x) {
     unsigned int offset;
