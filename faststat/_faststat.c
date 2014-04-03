@@ -107,7 +107,7 @@ typedef struct faststat_Stats_struct {
     unsigned int num_expo_avgs;
     faststat_ExpoAvg *expo_avgs;
     double window_avg;
-    unsigned int num_prev;
+    unsigned int num_prev; // MUST BE A POWER OF 2!
     faststat_PrevSample *lastN;
     unsigned int num_window_counts;
     //window counts must be sorted by window_size, to
@@ -414,7 +414,7 @@ static void _update_buckets(faststat_Stats *self, double x) {
 static void _update_lastN(faststat_Stats *self, double x) {
     unsigned int offset;
     if(self->num_prev == 0) { return; }
-    offset = (self->n - 1) % self->num_prev;
+    offset = (self->n - 1) & (self->num_prev - 1);
     self->window_avg -= self->lastN[offset].value / (1.0 * self->num_prev);
     self->window_avg += x / (1.0 * self->num_prev);
     self->lastN[offset].value = x;
@@ -623,7 +623,7 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
 
     offset = 0;
     if(PyArg_ParseTuple(args, "i", &offset)) {
-        offset = ((self->n - 1)  + (self->num_prev - offset)) % self->num_prev;
+        offset = ((self->n - 1)  + (self->num_prev - offset)) & (self->num_prev - 1);
         val = self->lastN[offset].value;
         nanotime = self->lastN[offset].nanotime;
         pyval = PyFloat_FromDouble(val);
@@ -656,7 +656,7 @@ static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject
             PyTuple_SetItem(
                 cur_items, j, 
                 PyLong_FromUnsignedLong(
-                    cur->counts[(j + cur_window) % cur->num_windows]));
+                    cur->counts[(j + cur_window) & (cur->num_windows - 1)]));
         }
         PyDict_SetItem(
             window_count_dict,
