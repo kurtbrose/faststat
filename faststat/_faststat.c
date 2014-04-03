@@ -87,7 +87,7 @@ typedef struct {
 // represents a count for a given interval,
 // aligned on unix epoch
 typedef struct {
-    unsigned short num_windows;  // number of counts
+    unsigned short num_windows;  // number of counts -- MUST BE A POWER OF 2
     unsigned long long window_size_nanosecs;  // size of each window in seconds
     unsigned int *counts;  // counts for the previous num_windows intervals
 } faststat_WindowCount;
@@ -451,7 +451,7 @@ static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
         }
         // TODO: convert this to a memset instead of a loop (perhaps)
         for(j = last_window + 1; j <= cur_window; j++) {
-            cur->counts[j % cur->num_windows] = 0;
+            cur->counts[j & (cur->num_windows - 1)] = 0;
         }  // zero out all the "missed" windows
     }
 }
@@ -465,7 +465,7 @@ static void _update_window_counts(faststat_Stats *self, unsigned long long t) {
     for(i = 0; i < self->num_window_counts; i++) {
         cur = &(self->window_counts[i]);
         // use the current time as the index into the circular array to save some memory
-        cur_count = (t / cur->window_size_nanosecs) % cur->num_windows;
+        cur_count = (t / cur->window_size_nanosecs) & (cur->num_windows - 1);
         ++(cur->counts[cur_count]);
     }
 }
