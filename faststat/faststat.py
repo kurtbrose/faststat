@@ -246,7 +246,7 @@ try:
             lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
             self.interval = CInterval(window_counts=())
             self._stats = _faststat.Stats(buckets, lastN, percentiles, 
-                self.interval._stats, EXPO_AVGS, WINDOW_COUNTS)
+                self.interval._stats, EXPO_AVGS, WINDOW_COUNTS, num_top=64)
             self.add = self._stats.add
 
         def __getattr__(self, name):
@@ -262,7 +262,8 @@ try:
                 window_counts=WINDOW_COUNTS):
             buckets = buckets + (float("inf"),)
             lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
-            self._stats = _faststat.Stats(buckets, lastN, percentiles, None, (), window_counts)
+            self._stats = _faststat.Stats(buckets, lastN, percentiles, 
+                None, (), window_counts, num_top=64)
             self.tick = self._stats.tick
 
         def __getattr__(self, name):
@@ -278,7 +279,7 @@ try:
             lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
             self.interval = CInterval()
             self._stats = _faststat.Stats(buckets, lastN, percentiles, 
-                self.interval._stats, EXPO_AVGS, WINDOW_COUNTS)
+                self.interval._stats, EXPO_AVGS, WINDOW_COUNTS, num_top=64)
             self.end = self._stats.end
 
         def __getattr__(self, name):
