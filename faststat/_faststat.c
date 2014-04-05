@@ -71,10 +71,11 @@ typedef struct {
 } faststat_Bucket;
 
 
+// keeping this size a power of 2 makes pointer arithmetic in heap more efficient
 typedef struct {
     double value;
     unsigned long long nanotime;
-} faststat_PrevSample;
+} faststat_DataPoint;
 
 // represents an exponential moving average
 // aka a low pass filter, infinite impulse response filter
@@ -103,12 +104,14 @@ typedef struct faststat_Stats_struct {
     unsigned int num_percentiles;
     faststat_P2Percentile *percentiles;
     unsigned int num_buckets;
-    faststat_Bucket *buckets; // last bucket MUST BE
+    faststat_Bucket *buckets; // last bucket MUST BE +inf
     unsigned int num_expo_avgs;
     faststat_ExpoAvg *expo_avgs;
     double window_avg;
     unsigned int num_prev; // MUST BE A POWER OF 2!
-    faststat_PrevSample *lastN;
+    faststat_DataPoint *lastN;
+    unsigned int num_top; // MUST BE A POWER OF 2!
+    faststat_DataPoint *topN;
     unsigned int num_window_counts;
     //window counts must be sorted by window_size, to
     //make handling code cleaner/smaller
@@ -124,17 +127,18 @@ typedef struct {
 } faststat_StatsGroup;
 */
 
-char* NEW_ARGS[] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", "window_counts", NULL};
+char* NEW_ARGS[] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", 
+    "window_counts", "num_top", NULL};
 
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
     PyObject *buckets, *percentiles, *interval, *expo_avgs, *window_counts, *cur;
-    int num_prev, num_buckets, num_percentiles, num_expo_avgs, num_window_counts;
+    int num_prev, num_buckets, num_percentiles, num_expo_avgs, num_window_counts, num_top;
     int i, total, offset;
     double temp;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOOOO", NEW_ARGS, 
-            &buckets, &num_prev, &percentiles, &interval, &expo_avgs, &window_counts)) {
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOOOOi", NEW_ARGS, 
+            &buckets, &num_prev, &percentiles, &interval, &expo_avgs, &window_counts, &num_top)) {
         return NULL;
     }
 
@@ -198,7 +202,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         }
         self->num_prev = num_prev;
         if(num_prev) {
-            self->lastN = PyMem_New(faststat_PrevSample, num_prev);
+            self->lastN = PyMem_New(faststat_DataPoint, num_prev);
             for(i=0; i<num_prev; i++) {
                 self->lastN[i].value = 0;
                 self->lastN[i].nanotime = 0;
@@ -206,6 +210,13 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         } else {
             self->lastN = NULL;
         }
+        if(num_top == 0) {
+            num_top = 1;
+        }
+        self->num_top = num_top;
+        self->topN = PyMem_New(faststat_DataPoint, num_prev);
+        self->topN -= 1; //use 1 based indexing
+
         self->num_window_counts = num_window_counts;
         if(num_window_counts) {
             self->window_counts = PyMem_New(faststat_WindowCount, num_window_counts);
@@ -425,6 +436,53 @@ static void _update_lastN(faststat_Stats *self, double x) {
 }
 
 
+//this algorithm deterministically favors storing newer values over older values
+static void _update_topN(faststat_Stats *self, double x, unsigned long long t) {
+    faststat_DataPoint *cur, *left, *right, *end, *min, *topN;
+    unsigned int cur_i, left_i, right_i;
+    // uses one based indexing to save additions when navigating down heap
+    topN = self->topN;
+    if(x < topN[1].value) {
+        return;
+    }
+    // replace the smallest element of the topN with the new point
+    topN[1].value = x;
+    topN[1].nanotime = t;
+    // restore the heap condition
+    cur = topN + 1; //use pointers instead of array indices
+    cur_i = 1;
+    left = topN + 2;
+    left_i = 2;
+    right = topN + 3;
+    right_i = 3;
+    end = topN + 1 + self->num_top;
+    while(right < end) {
+        if(left->value == right->value) {
+            min = left->nanotime > right->nanotime ? left : right;
+        } else {
+            min = left->value < right->value ? left : right;
+        }
+        if(cur->value < min->value) {
+            break;
+        }
+        // swap cur with min of left, right
+        x = min->value;
+        t = min->nanotime;
+        min->value = cur->value;
+        min->nanotime = cur->nanotime;
+        cur->value = x;
+        cur->nanotime = t;
+        // set up for the next layer of the heap
+        cur = min;
+        cur_i = min == left ? left_i : right_i;
+        left_i = cur_i * 2;
+        right_i = left_i + 1;
+        left = topN + left_i;
+        right = topN + right_i;
+    }
+}
+
+
 static void _update_expo_avgs(faststat_Stats *self, double x) {
     unsigned int i;
     double val, alpha;
@@ -499,6 +557,7 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
     _update_expo_avgs(self, x);
     _update_lastN(self, x);
     _update_window_counts(self, t);
+    _update_topN(self, x, t);
 }
 
 
