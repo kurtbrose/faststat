@@ -498,7 +498,8 @@ static void _update_expo_avgs(faststat_Stats *self, double x) {
 // re-zero all of the windows which have been "missed" between self->lasttime and t
 static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
     faststat_WindowCount *cur;
-    int i, j, last_window, cur_window;
+    unsigned int i;
+    unsigned long long j, last_window, cur_window;
     for(i = 0; i < self->num_window_counts; i++) {
         cur = &(self->window_counts[i]);
         last_window = self->lasttime / cur->window_size_nanosecs;
@@ -520,7 +521,7 @@ static void _rezero_window_counts(faststat_Stats *self, unsigned long long t) {
 
 static void _update_window_counts(faststat_Stats *self, unsigned long long t) {
     faststat_WindowCount *cur;
-    int i, cur_count;
+    unsigned int i, cur_count;
     _rezero_window_counts(self, t);
     // step 2 -- increment current counts
     for(i = 0; i < self->num_window_counts; i++) {
@@ -702,11 +703,23 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
 }
 
 
+static PyObject* faststat_Stats_get_topN(faststat_Stats *self, PyObject *args) {
+    PyObject *ret;
+    unsigned int i;
+    ret = PyList_New(self->num_top);
+    for(i=0; i<self->num_top; i++) {
+        PyList_SetItem(ret, i, Py_BuildValue(
+            "(dK)", self->topN[i].value, self->topN[i].nanotime));
+    }
+    return ret;
+}
+
+
 static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject *args) {
     unsigned long long t;
     PyObject *window_count_dict, *cur_items;
     faststat_WindowCount *cur;
-    unsigned int i, j, cur_window;
+    unsigned long long i, j, cur_window;
     t = nanotime();
     _rezero_window_counts(self, t);
     window_count_dict = PyDict_New();
@@ -716,7 +729,7 @@ static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject
         cur_window = t / cur->window_size_nanosecs;
         for(j = 0; j < cur->num_windows; j++) {
             PyTuple_SetItem(
-                cur_items, j, 
+                cur_items, (Py_ssize_t)j, 
                 PyLong_FromUnsignedLong(
                     cur->counts[(j + cur_window) & (cur->num_windows - 1)]));
         }
