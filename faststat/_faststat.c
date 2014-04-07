@@ -756,6 +756,8 @@ static PyMethodDef faststat_Stats_methods[] = {
         "get a dictionary of decay rates to previous averages"},
     {"get_prev", (PyCFunction)faststat_Stats_get_prev, METH_VARARGS,
         "get the nth previous sample"},
+    {"get_topN", (PyCFunction)faststat_Stats_get_topN, METH_NOARGS,
+        "get the highest values"},
     {"get_window_counts", (PyCFunction)faststat_Stats_get_window_counts, METH_NOARGS,
         "get a dictionary of window intervals to window counts"},
     {NULL}
