@@ -723,6 +723,10 @@ static PyObject* faststat_Stats_get_topN(faststat_Stats *self, PyObject *args) {
         PyList_SetItem(ret, i, Py_BuildValue(
             "(dK)", self->topN[i].value, self->topN[i].nanotime));
     }
+    if(PyErr_Occurred()) { 
+        Py_DECREF(ret);
+        return NULL; 
+    }
     return ret;
 }
 
