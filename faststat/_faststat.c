@@ -581,6 +581,7 @@ static PyObject* faststat_Stats_add(faststat_Stats *self, PyObject *args) {
         }
         _add(self, x, t);
     }
+    if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -597,6 +598,7 @@ static PyObject* faststat_Stats_end(faststat_Stats *self, PyObject *args) {
         }
         _add(self, (double)(end - start), end);
     }
+    if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -612,6 +614,7 @@ static PyObject* faststat_Stats_tick(faststat_Stats *self, PyObject *args) {
     } else {
         self->lasttime = t;
     }
+    if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -634,6 +637,10 @@ static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *
             PyFloat_FromDouble(cur_val), 
             PyFloat_FromDouble(cur->val));
     }
+    if(PyErr_Occurred()) { 
+        Py_DECREF(p_dict);
+        return NULL; 
+    }
     return p_dict;
 }
 
@@ -654,6 +661,10 @@ static PyObject* faststat_Stats_get_buckets(faststat_Stats* self, PyObject *args
             PyLong_FromUnsignedLongLong(cur->count));
     }
     PyDict_SetItem(b_dict, Py_None, PyLong_FromUnsignedLongLong(leftover));
+    if(PyErr_Occurred()) { 
+        Py_DECREF(b_dict);
+        return NULL; 
+    }
     return b_dict;
 }
 
@@ -697,6 +708,7 @@ static PyObject* faststat_Stats_get_prev(faststat_Stats *self, PyObject *args) {
             }
         }
     }
+    if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -724,6 +736,10 @@ static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject
             window_count_dict,
             PyLong_FromUnsignedLongLong(cur->window_size_nanosecs),
             cur_items);
+    }
+    if(PyErr_Occurred()) { 
+        Py_DECREF(window_count_dict);
+        return NULL; 
     }
     return window_count_dict;
 }
@@ -795,6 +811,7 @@ static PyTypeObject faststat_StatsType = {
 static PyObject* pynanotime(PyObject *_) {
     PyObject *result;
     result = PyLong_FromUnsignedLongLong(nanotime());
+    if(PyErr_Occurred()) { return NULL; }
     return result;
 }
 
@@ -803,6 +820,7 @@ static PyObject* pynanotime_override(PyObject *_, PyObject *args) {
     if(PyArg_ParseTuple(args, "K", &t)) {
         nanotime_override = t;
     }
+    if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
 }
