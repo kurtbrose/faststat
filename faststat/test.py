@@ -51,13 +51,10 @@ def online_kurtosis(data):
     return kurtosis
 
 
-def test(py=False, sample=False):
+def test():
     random.seed(103)  # make test repeatable
     data = [random.normalvariate(1.0, 1.0) for i in range(int(1e6))]
-    if py:
-        stats = PyStats()
-    else:
-        stats = Stats()
+    stats = Stats()
     start = time.time()
     for d in data:
         stats.add(d)
@@ -73,6 +70,7 @@ def test(py=False, sample=False):
     print stats.interval.min, stats.interval.geometric_mean, stats.interval.harmonic_mean
     print "expo_avgs (should be 1)", stats.expo_avgs
     print "window_counts", stats.get_window_counts()
+    print "top 10", sorted(stats.get_topN())[-10:]
     return stats
 
 
