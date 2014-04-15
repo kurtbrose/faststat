@@ -1,0 +1,339 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>faststat.faststat &mdash; faststat 0.7 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="faststat 0.7 documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">faststat 0.7 documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for faststat.faststat</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Intended as a light-weight general purpose stats collector.</span>
+
+<span class="sd">Has several functions:</span>
+<span class="sd">1-</span>
+<span class="sd">Computation of higher order statistics based on</span>
+<span class="sd">http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics</span>
+
+<span class="sd">2-</span>
+<span class="sd">Keeping a list of the last several entries seen.</span>
+
+<span class="sd">3-</span>
+<span class="sd">Keeping a list of bucket counts of amount seen less than or equal to each amount.</span>
+
+<span class="sd">These functions are all rolled into a single class, because at this low level</span>
+<span class="sd">the function call overhead is significant.</span>
+
+<span class="sd">Also a C-implementation is provided which improves the performance by a factor</span>
+<span class="sd">of ~15.</span>
+
+<span class="sd">Intended for use in long-running applications, where there will be many</span>
+<span class="sd">more values added than stats queries made.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">import</span> <span class="nn">array</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+
+<span class="kn">import</span> <span class="nn">_faststat</span>
+
+
+<div class="viewcode-block" id="Sample"><a class="viewcode-back" href="../../index.html#faststat.faststat.Sample">[docs]</a><span class="k">class</span> <span class="nc">Sample</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    This class implements Reservoir Sampling to keep a random sample of an infinite stream.</span>
+<span class="sd">    See http://gregable.com/2007/10/reservoir-sampling.html for one description.</span>
+
+<span class="sd">    This class is kept separate from the other stats, because its memory usage is far greater.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_size</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">14</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s">&#39;f&#39;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">type</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_size</span> <span class="o">=</span> <span class="n">sample_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_vals</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_vals</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_size</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_vals</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pos</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_size</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">[</span><span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_vals</span> <span class="o">+=</span> <span class="mi">1</span>
+</div>
+<span class="n">DEFAULT_PERCENTILES</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.50</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.90</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mf">0.99</span><span class="p">)</span>
+<span class="n">EXPO_AVGS</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="mf">1.0</span><span class="o">/</span><span class="mi">4</span><span class="p">,</span> <span class="mf">1.0</span><span class="o">/</span><span class="mi">8</span><span class="p">,</span> <span class="mf">1.0</span><span class="o">/</span><span class="mi">16</span><span class="p">,</span> <span class="mf">1.0</span><span class="o">/</span><span class="mi">32</span><span class="p">,</span> <span class="mf">1.0</span><span class="o">/</span><span class="mi">64</span><span class="p">)</span>
+
+
+<span class="c"># keep buckets for intervals in size from 100ns to ~14 hours</span>
+<span class="n">TIME_BUCKETS</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span> 
+    <span class="p">[(</span><span class="mi">1</span><span class="o">*</span><span class="mi">10</span><span class="o">**</span><span class="n">x</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="mi">10</span><span class="o">**</span><span class="n">x</span><span class="p">,</span> <span class="mi">5</span><span class="o">*</span><span class="mi">10</span><span class="o">**</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">13</span><span class="p">)],</span> <span class="p">())</span>
+<span class="c"># useful buckets for unsigned integers up to 64 bits</span>
+<span class="n">UINT_BUCKETS</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span>
+    <span class="p">[(</span><span class="mi">1</span><span class="o">*</span><span class="mi">10</span><span class="o">**</span><span class="n">x</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="mi">10</span><span class="o">**</span><span class="n">x</span><span class="p">,</span> <span class="mi">5</span><span class="o">*</span><span class="mi">10</span><span class="o">**</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">20</span><span class="p">)],</span> <span class="p">())</span>
+<span class="c"># useful buckets for signed integers up to 64 bits</span>
+<span class="n">INT_BUCKETS</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">reversed</span><span class="p">([</span><span class="o">-</span><span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">UINT_BUCKETS</span><span class="p">[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]]))</span> <span class="o">+</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span> <span class="o">+</span> <span class="n">UINT_BUCKETS</span><span class="p">[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
+
+<span class="n">DEFAULT_BUCKETS</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1e-5</span><span class="p">,</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="mf">1e-2</span><span class="p">,</span> <span class="mf">2e-2</span><span class="p">,</span> <span class="mf">5e-2</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> 
+    <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">,</span> <span class="mf">2e3</span><span class="p">,</span> <span class="mf">5e3</span><span class="p">,</span> <span class="mf">1e4</span><span class="p">,</span> <span class="mf">1e5</span><span class="p">,</span> <span class="mf">1e6</span><span class="p">)</span>
+<span class="n">DEFAULT_BUCKETS</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">reversed</span><span class="p">([</span><span class="o">-</span><span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">DEFAULT_BUCKETS</span><span class="p">]))</span> <span class="o">+</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span> <span class="o">+</span> <span class="n">DEFAULT_BUCKETS</span>
+
+<span class="n">ONE_MIN_NS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mf">60e9</span><span class="p">)</span>
+<span class="n">ONE_HOUR_NS</span> <span class="o">=</span> <span class="mi">60</span> <span class="o">*</span> <span class="n">ONE_MIN_NS</span>
+
+<span class="n">WINDOW_COUNTS</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">64</span><span class="p">,</span> <span class="n">ONE_MIN_NS</span><span class="p">),</span> <span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="n">ONE_HOUR_NS</span><span class="p">)]</span>
+
+<span class="k">class</span> <span class="nc">_BaseStats</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="s">&#39;base class to avoid repeating code&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buckets</span><span class="p">,</span> <span class="n">lastN</span><span class="p">,</span> <span class="n">percentiles</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span> <span class="n">expo_avgs</span><span class="p">,</span>
+            <span class="n">window_counts</span><span class="p">,</span> <span class="n">num_top</span><span class="p">):</span>
+        <span class="n">buckets</span> <span class="o">=</span> <span class="n">buckets</span> <span class="o">+</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="s">&quot;inf&quot;</span><span class="p">),)</span>
+        <span class="n">lastN</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">lastN</span><span class="p">)</span><span class="o">/</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>
+        <span class="n">num_top</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">lastN</span><span class="p">)</span><span class="o">/</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">interval</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">interval</span> <span class="o">=</span> <span class="n">Interval</span><span class="p">(</span><span class="n">window_counts</span><span class="o">=</span><span class="p">())</span>
+            <span class="n">interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">interval</span><span class="o">.</span><span class="n">_stats</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">interval</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stats</span> <span class="o">=</span> <span class="n">_faststat</span><span class="o">.</span><span class="n">Stats</span><span class="p">(</span><span class="n">buckets</span><span class="p">,</span> <span class="n">lastN</span><span class="p">,</span> <span class="n">percentiles</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span>
+            <span class="n">expo_avgs</span><span class="p">,</span> <span class="n">window_counts</span><span class="p">,</span> <span class="n">num_top</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">variance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="s">&quot;nan&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">m2</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">trimean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_percentiles</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mf">0.25</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p</span><span class="p">[</span><span class="mf">0.5</span><span class="p">]</span> <span class="o">+</span> <span class="n">p</span><span class="p">[</span><span class="mf">0.75</span><span class="p">])</span> <span class="o">/</span> <span class="mi">4</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">skewness</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">m2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="s">&quot;nan&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">**</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">m3</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">m2</span> <span class="o">**</span> <span class="mf">1.5</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">kurtosis</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">m2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="s">&quot;nan&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">m4</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">m2</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">-</span> <span class="mi">3</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">percentiles</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_percentiles</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">buckets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_buckets</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">geometric_mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s">&#39;nth root of product of data points&#39;</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sum_of_logs</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">harmonic_mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s">&#39;inverse of mean of inverses of data points&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">sum_of_inv</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">window_median</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_prev</span><span class="p">:</span>
+            <span class="n">prev</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">get_prev</span><span class="p">(</span><span class="n">i</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_prev</span><span class="p">)])</span>
+            <span class="k">return</span> <span class="n">prev</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">expo_avgs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_expo_avgs</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">lag_avgs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        same data as expo_avgs, but with keys as the average age</span>
+<span class="sd">        of the data -- assuming evenly spaced data points -- rather</span>
+<span class="sd">        than decay rates</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">interval</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">interval</span><span class="o">.</span><span class="n">mean</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">([(</span><span class="n">interval</span><span class="o">/</span><span class="n">alpha</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span> 
+            <span class="k">for</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_expo_avgs</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">percentiles</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+            <span class="n">quartiles</span> <span class="o">=</span> <span class="s">&quot;(n too small)&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">quartiles</span> <span class="o">=</span> <span class="p">(</span><span class="n">_sigfigs</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)),</span> 
+                <span class="n">_sigfigs</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)),</span> <span class="n">_sigfigs</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="mf">0.75</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="s">&#39;&lt;faststat.{0} n={1} mean={2} quartiles={3}&gt;&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__name__</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">_sigfigs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mean</span><span class="p">),</span> <span class="n">quartiles</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Stats"><a class="viewcode-back" href="../../index.html#faststat.faststat.Stats">[docs]</a><span class="k">class</span> <span class="nc">Stats</span><span class="p">(</span><span class="n">_BaseStats</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Call add(value) to add a data point.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buckets</span><span class="o">=</span><span class="n">DEFAULT_BUCKETS</span><span class="p">,</span> <span class="n">lastN</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">percentiles</span><span class="o">=</span><span class="n">DEFAULT_PERCENTILES</span><span class="p">,</span>
+            <span class="n">interval</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Stats</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">buckets</span><span class="p">,</span> <span class="n">lastN</span><span class="p">,</span> <span class="n">percentiles</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span> <span class="n">EXPO_AVGS</span><span class="p">,</span>
+            <span class="n">WINDOW_COUNTS</span><span class="p">,</span> <span class="n">num_top</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stats</span><span class="o">.</span><span class="n">add</span>
+
+    <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&quot;tick&quot;</span><span class="p">,</span> <span class="s">&quot;end&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stats</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Interval"><a class="viewcode-back" href="../../index.html#faststat.faststat.Interval">[docs]</a><span class="k">class</span> <span class="nc">Interval</span><span class="p">(</span><span class="n">_BaseStats</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Call tick() to register occurrences.</span>
+<span class="sd">    Note that calling tick() N times results in N-1 data points.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buckets</span><span class="o">=</span><span class="n">TIME_BUCKETS</span><span class="p">,</span> <span class="n">lastN</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">percentiles</span><span class="o">=</span><span class="n">DEFAULT_PERCENTILES</span><span class="p">,</span>
+            <span class="n">window_counts</span><span class="o">=</span><span class="n">WINDOW_COUNTS</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Interval</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">buckets</span><span class="p">,</span> <span class="n">lastN</span><span class="p">,</span> <span class="n">percentiles</span><span class="p">,</span> <span class="bp">False</span><span class="p">,</span> <span class="p">(),</span> <span class="p">(),</span> <span class="n">num_top</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tick</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stats</span><span class="o">.</span><span class="n">tick</span>
+
+    <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&quot;add&quot;</span><span class="p">,</span> <span class="s">&quot;end&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stats</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Duration"><a class="viewcode-back" href="../../index.html#faststat.faststat.Duration">[docs]</a><span class="k">class</span> <span class="nc">Duration</span><span class="p">(</span><span class="n">_BaseStats</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Represents statistics for a duration.</span>
+<span class="sd">    Call end(start_time_nanos) to add a data point.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buckets</span><span class="o">=</span><span class="n">TIME_BUCKETS</span><span class="p">,</span> <span class="n">lastN</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">percentiles</span><span class="o">=</span><span class="n">DEFAULT_PERCENTILES</span><span class="p">,</span>
+            <span class="n">interval</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Duration</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">buckets</span><span class="p">,</span> <span class="n">lastN</span><span class="p">,</span> <span class="n">percentiles</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span> <span class="n">EXPO_AVGS</span><span class="p">,</span>
+            <span class="n">WINDOW_COUNTS</span><span class="p">,</span> <span class="n">num_top</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stats</span><span class="o">.</span><span class="n">end</span>
+
+    <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&quot;add&quot;</span><span class="p">,</span> <span class="s">&quot;tick&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stats</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Markov"><a class="viewcode-back" href="../../index.html#faststat.faststat.Markov">[docs]</a><span class="k">class</span> <span class="nc">Markov</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Represents the states of a Markov process.  The transition between states are</span>
+<span class="sd">    modeled as Intervals, and the time spent in a given state is modeled as</span>
+<span class="sd">    Durations.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_durations</span>  <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="n">faststat</span><span class="o">.</span><span class="n">Duration</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transition_intervals</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="n">faststat</span><span class="o">.</span><span class="n">Interval</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Markov.transition"><a class="viewcode-back" href="../../index.html#faststat.faststat.Markov.transition">[docs]</a>    <span class="k">def</span> <span class="nf">transition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nxt</span><span class="p">,</span> <span class="n">cur</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">since</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Register that a transition has taken place.</span>
+<span class="sd">        nxt is an identifier for the state being entered.</span>
+<span class="sd">        cur is an identifier for the state being left.</span>
+<span class="sd">        since is the time at which the previous state was entered.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transition_intervals</span><span class="p">[(</span><span class="n">cur</span><span class="p">,</span> <span class="n">nxt</span><span class="p">)]</span><span class="o">.</span><span class="n">tick</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">since</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">state_durations</span><span class="p">[</span><span class="n">cur</span><span class="p">]</span><span class="o">.</span><span class="n">end</span><span class="p">(</span><span class="n">since</span><span class="p">)</span>
+
+</div></div>
+<span class="n">TimeSeries</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">Stats</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+
+<span class="n">nanotime</span> <span class="o">=</span> <span class="n">_faststat</span><span class="o">.</span><span class="n">nanotime</span>
+
+
+<span class="k">def</span> <span class="nf">_sigfigs</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">sigfigs</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+    <span class="s">&#39;helper function to round a number to significant figures&#39;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>  <span class="c"># avoid math domain errors</span>
+        <span class="k">return</span> <span class="n">n</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">-</span><span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">n</span><span class="p">)))</span> <span class="o">-</span> <span class="n">sigfigs</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">faststat 0.7 documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Kurt Rose.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

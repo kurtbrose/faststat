@@ -1,0 +1,161 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>faststat &mdash; faststat 0.7 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="faststat 0.7 documentation" href="#" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="#">faststat 0.7 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="faststat">
+<h1>faststat<a class="headerlink" href="#faststat" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul class="simple">
+</ul>
+</div>
+<span class="target" id="module-faststat.faststat"></span><p>Intended as a light-weight general purpose stats collector.</p>
+<p>Has several functions:
+1-
+Computation of higher order statistics based on
+<a class="reference external" href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics">http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics</a></p>
+<p>2-
+Keeping a list of the last several entries seen.</p>
+<p>3-
+Keeping a list of bucket counts of amount seen less than or equal to each amount.</p>
+<p>These functions are all rolled into a single class, because at this low level
+the function call overhead is significant.</p>
+<p>Also a C-implementation is provided which improves the performance by a factor
+of ~15.</p>
+<p>Intended for use in long-running applications, where there will be many
+more values added than stats queries made.</p>
+<dl class="class">
+<dt id="faststat.faststat.Duration">
+<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Duration</tt><big>(</big><em>buckets=(100</em>, <em>200</em>, <em>500</em>, <em>1000</em>, <em>2000</em>, <em>5000</em>, <em>10000</em>, <em>20000</em>, <em>50000</em>, <em>100000</em>, <em>200000</em>, <em>500000</em>, <em>1000000</em>, <em>2000000</em>, <em>5000000</em>, <em>10000000</em>, <em>20000000</em>, <em>50000000</em>, <em>100000000</em>, <em>200000000</em>, <em>500000000</em>, <em>1000000000</em>, <em>2000000000</em>, <em>5000000000L</em>, <em>10000000000L</em>, <em>20000000000L</em>, <em>50000000000L</em>, <em>100000000000L</em>, <em>200000000000L</em>, <em>500000000000L</em>, <em>1000000000000L</em>, <em>2000000000000L</em>, <em>5000000000000L)</em>, <em>lastN=64</em>, <em>percentiles=(0.25</em>, <em>0.5</em>, <em>0.75</em>, <em>0.9</em>, <em>0.95</em>, <em>0.99)</em>, <em>interval=True</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Duration"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Duration" title="Permalink to this definition">¶</a></dt>
+<dd><p>Represents statistics for a duration.
+Call end(start_time_nanos) to add a data point.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="faststat.faststat.Interval">
+<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Interval</tt><big>(</big><em>buckets=(100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 20000000, 50000000, 100000000, 200000000, 500000000, 1000000000, 2000000000, 5000000000L, 10000000000L, 20000000000L, 50000000000L, 100000000000L, 200000000000L, 500000000000L, 1000000000000L, 2000000000000L, 5000000000000L), lastN=64, percentiles=(0.25, 0.5, 0.75, 0.9, 0.95, 0.99), window_counts=[(64, 60000000000L), (32, 3600000000000L)]</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Interval"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>Call tick() to register occurrences.
+Note that calling tick() N times results in N-1 data points.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="faststat.faststat.Markov">
+<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Markov</tt><a class="reference internal" href="_modules/faststat/faststat.html#Markov"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Markov" title="Permalink to this definition">¶</a></dt>
+<dd><p>Represents the states of a Markov process.  The transition between states are
+modeled as Intervals, and the time spent in a given state is modeled as
+Durations.</p>
+<dl class="method">
+<dt id="faststat.faststat.Markov.transition">
+<tt class="descname">transition</tt><big>(</big><em>nxt</em>, <em>cur=None</em>, <em>since=None</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Markov.transition"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Markov.transition" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register that a transition has taken place.
+nxt is an identifier for the state being entered.
+cur is an identifier for the state being left.
+since is the time at which the previous state was entered.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="faststat.faststat.Sample">
+<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Sample</tt><big>(</big><em>sample_size=16384</em>, <em>type='f'</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Sample"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Sample" title="Permalink to this definition">¶</a></dt>
+<dd><p>This class implements Reservoir Sampling to keep a random sample of an infinite stream.
+See <a class="reference external" href="http://gregable.com/2007/10/reservoir-sampling.html">http://gregable.com/2007/10/reservoir-sampling.html</a> for one description.</p>
+<p>This class is kept separate from the other stats, because its memory usage is far greater.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="faststat.faststat.Stats">
+<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Stats</tt><big>(</big><em>buckets=(-1000000.0</em>, <em>-100000.0</em>, <em>-10000.0</em>, <em>-5000.0</em>, <em>-2000.0</em>, <em>-1000.0</em>, <em>-500</em>, <em>-200</em>, <em>-100</em>, <em>-50</em>, <em>-20</em>, <em>-10</em>, <em>-9</em>, <em>-8</em>, <em>-7</em>, <em>-6</em>, <em>-5</em>, <em>-4</em>, <em>-3</em>, <em>-2</em>, <em>-1</em>, <em>-0.5</em>, <em>-0.2</em>, <em>-0.1</em>, <em>-0.05</em>, <em>-0.02</em>, <em>-0.01</em>, <em>-0.001</em>, <em>-0.0001</em>, <em>-1e-05</em>, <em>0</em>, <em>0</em>, <em>0</em>, <em>1e-05</em>, <em>0.0001</em>, <em>0.001</em>, <em>0.01</em>, <em>0.02</em>, <em>0.05</em>, <em>0.1</em>, <em>0.2</em>, <em>0.5</em>, <em>1</em>, <em>2</em>, <em>3</em>, <em>4</em>, <em>5</em>, <em>6</em>, <em>7</em>, <em>8</em>, <em>9</em>, <em>10</em>, <em>20</em>, <em>50</em>, <em>100</em>, <em>200</em>, <em>500</em>, <em>1000.0</em>, <em>2000.0</em>, <em>5000.0</em>, <em>10000.0</em>, <em>100000.0</em>, <em>1000000.0)</em>, <em>lastN=64</em>, <em>percentiles=(0.25</em>, <em>0.5</em>, <em>0.75</em>, <em>0.9</em>, <em>0.95</em>, <em>0.99)</em>, <em>interval=True</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Stats"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Call add(value) to add a data point.</p>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/index.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="#">faststat 0.7 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Kurt Rose.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>
