@@ -265,3 +265,8 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'http://docs.python.org/': None}
+
+import sys
+import os.path
+sys.path = [os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + sys.path
+
