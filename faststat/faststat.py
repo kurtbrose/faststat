@@ -1,25 +1,10 @@
 '''
-Intended as a light-weight general purpose stats collector.
-
-Has several functions:
-1-
-Computation of higher order statistics based on
-http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
-
-2-
-Keeping a list of the last several entries seen.
-
-3-
-Keeping a list of bucket counts of amount seen less than or equal to each amount.
-
-These functions are all rolled into a single class, because at this low level
-the function call overhead is significant.
-
-Also a C-implementation is provided which improves the performance by a factor
-of ~15.
-
-Intended for use in long-running applications, where there will be many
-more values added than stats queries made.
+faststat is a *streaming*, *light-weight* statistics library designed for embedding
+in other Python applications.  *Steaming* means
+that faststat operates on data points as they arrive, without needing to store
+previous data points.  *Light-weight* means that statistics do not take up a great
+deal of CPU or RAM.  Adding a data point to a stat object is a 0.5 - 3 microsecond operation.  
+Each stat object takes about 4kiB of memory.
 '''
 import array
 import random
