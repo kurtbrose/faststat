@@ -26,8 +26,56 @@ variable, and then add data points to it.
    >>> s
    <faststat.Stats n=100 mean=49.5 quartiles=(23.4, 49.6, 73.8)>
 
-Stats class
------------
+Collected data
+--------------
+The following data is collected for each point.  A data point is considered to be `(x, t)`
+where `x` is a floating point value, and `t` is the system clock at the time the data was passed
+to faststat.
+
+=============== ====================================================================================
+attribute       description
+=============== ====================================================================================
+n               The number of data points.
+
+mean            The arithmetic mean, also known as expected value E(x) or 
+                :math:`\bar{x}`. Defined as :math:`\bar{x} = \frac{x_1 + x_2 + ... + x_n}{n}`
+
+max             The largest value seen.
+
+maxtime         The time of the largest data point.
+
+min             The smallest value seen.
+
+mintime         The time of the smallest data point.
+
+lasttime        The time of the most recent data point.
+
+percentiles     A dictionary of approximate percentiles.
+
+buckets         Counts of data points which have occurred in different ranges.
+                Essentially logarithmic-scale histogram data.      
+
+variance        The variance.  See http://en.wikipedia.org/wiki/Variance
+
+skewness        The skewness.  See http://en.wikipedia.org/wiki/Skewness
+
+kurtosis        The kurtosis.  See http://en.wikipedia.org/wiki/Kurtosis
+
+geometric_mean  The geometric mean, or NaN if any points are <= 0.  
+                See http://en.wikipedia.org/wiki/Geometric_mean
+
+harmonic_mean   The harmonic mean, or NaN if any points are <= 0.
+                See http://en.wikipedia.org/wiki/Harmonic_mean
+
+expo_avgs       A dictionary mapping exponential decay factors to current values.
+                See http://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
+
+get_prev()      The most recent data points.
+
+get_topN()      The largest data points
+
+window_avg      The mean of the data points in get_prev().
+=============== ====================================================================================
 
 
 Examples
