@@ -33,9 +33,6 @@
         <li class="right" style="margin-right: 10px">
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
-        <li class="right" >
-          <a href="py-modindex.html" title="Python Module Index"
-             >modules</a> |</li>
         <li><a href="#">faststat 0.7 documentation</a> &raquo;</li> 
       </ul>
     </div>  
@@ -47,70 +44,128 @@
             
   <div class="section" id="faststat">
 <h1>faststat<a class="headerlink" href="#faststat" title="Permalink to this headline">¶</a></h1>
+<p>faststat is a <em>streaming</em>, <em>light-weight</em> statistics library designed for embedding
+in other Python applications.  <em>Steaming</em> means
+that faststat operates on data points as they arrive, without needing to store
+previous data points.  <em>Light-weight</em> means that statistics do not take up a great
+deal of CPU or RAM.  Adding a data point to a stat object is a 0.5 - 3 microsecond operation.
+Each stat object takes about 4kiB of memory.</p>
 <div class="toctree-wrapper compound">
 <ul class="simple">
 </ul>
 </div>
-<span class="target" id="module-faststat.faststat"></span><p>Intended as a light-weight general purpose stats collector.</p>
-<p>Has several functions:
-1-
-Computation of higher order statistics based on
-<a class="reference external" href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics">http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics</a></p>
-<p>2-
-Keeping a list of the last several entries seen.</p>
-<p>3-
-Keeping a list of bucket counts of amount seen less than or equal to each amount.</p>
-<p>These functions are all rolled into a single class, because at this low level
-the function call overhead is significant.</p>
-<p>Also a C-implementation is provided which improves the performance by a factor
-of ~15.</p>
-<p>Intended for use in long-running applications, where there will be many
-more values added than stats queries made.</p>
-<dl class="class">
-<dt id="faststat.faststat.Duration">
-<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Duration</tt><big>(</big><em>buckets=(100</em>, <em>200</em>, <em>500</em>, <em>1000</em>, <em>2000</em>, <em>5000</em>, <em>10000</em>, <em>20000</em>, <em>50000</em>, <em>100000</em>, <em>200000</em>, <em>500000</em>, <em>1000000</em>, <em>2000000</em>, <em>5000000</em>, <em>10000000</em>, <em>20000000</em>, <em>50000000</em>, <em>100000000</em>, <em>200000000</em>, <em>500000000</em>, <em>1000000000</em>, <em>2000000000</em>, <em>5000000000L</em>, <em>10000000000L</em>, <em>20000000000L</em>, <em>50000000000L</em>, <em>100000000000L</em>, <em>200000000000L</em>, <em>500000000000L</em>, <em>1000000000000L</em>, <em>2000000000000L</em>, <em>5000000000000L)</em>, <em>lastN=64</em>, <em>percentiles=(0.25</em>, <em>0.5</em>, <em>0.75</em>, <em>0.9</em>, <em>0.95</em>, <em>0.99)</em>, <em>interval=True</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Duration"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Duration" title="Permalink to this definition">¶</a></dt>
-<dd><p>Represents statistics for a duration.
-Call end(start_time_nanos) to add a data point.</p>
-</dd></dl>
+<div class="section" id="basic-usage">
+<h2>Basic usage<a class="headerlink" href="#basic-usage" title="Permalink to this headline">¶</a></h2>
+<p>The most basic usage of faststat is to create a Stats object to represent some continuous
+variable, and then add data points to it.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">faststat</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">faststat</span><span class="o">.</span><span class="n">Stats</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+<span class="gp">... </span>   <span class="n">s</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span>
+<span class="go">&lt;faststat.Stats n=100 mean=49.5 quartiles=(23.4, 49.6, 73.8)&gt;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="collected-data">
+<h2>Collected data<a class="headerlink" href="#collected-data" title="Permalink to this headline">¶</a></h2>
+<p>The following data is collected for each point.  A data point is considered to be <cite>(x, t)</cite>
+where <cite>x</cite> is a floating point value, and <cite>t</cite> is the system clock at the time the data was passed
+to faststat.</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="15%" />
+<col width="85%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">attribute</th>
+<th class="head">description</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>n</td>
+<td>The number of data points.</td>
+</tr>
+<tr class="row-odd"><td>mean</td>
+<td>The arithmetic mean, also known as expected value E(x) or
+<span class="math">\(\bar{x}\)</span>. Defined as <span class="math">\(\bar{x} = \frac{x_1 + x_2 + ... + x_n}{n}\)</span></td>
+</tr>
+<tr class="row-even"><td>max</td>
+<td>The largest value seen.</td>
+</tr>
+<tr class="row-odd"><td>maxtime</td>
+<td>The time of the largest data point.</td>
+</tr>
+<tr class="row-even"><td>min</td>
+<td>The smallest value seen.</td>
+</tr>
+<tr class="row-odd"><td>mintime</td>
+<td>The time of the smallest data point.</td>
+</tr>
+<tr class="row-even"><td>lasttime</td>
+<td>The time of the most recent data point.</td>
+</tr>
+<tr class="row-odd"><td>percentiles</td>
+<td>A dictionary of approximate percentiles.</td>
+</tr>
+<tr class="row-even"><td>buckets</td>
+<td>Counts of data points which have occurred in different ranges.
+Essentially logarithmic-scale histogram data.</td>
+</tr>
+<tr class="row-odd"><td>variance</td>
+<td>The variance.  See <a class="reference external" href="http://en.wikipedia.org/wiki/Variance">http://en.wikipedia.org/wiki/Variance</a></td>
+</tr>
+<tr class="row-even"><td>skewness</td>
+<td>The skewness.  See <a class="reference external" href="http://en.wikipedia.org/wiki/Skewness">http://en.wikipedia.org/wiki/Skewness</a></td>
+</tr>
+<tr class="row-odd"><td>kurtosis</td>
+<td>The kurtosis.  See <a class="reference external" href="http://en.wikipedia.org/wiki/Kurtosis">http://en.wikipedia.org/wiki/Kurtosis</a></td>
+</tr>
+<tr class="row-even"><td>geometric_mean</td>
+<td>The geometric mean, or NaN if any points are &lt;= 0.
+See <a class="reference external" href="http://en.wikipedia.org/wiki/Geometric_mean">http://en.wikipedia.org/wiki/Geometric_mean</a></td>
+</tr>
+<tr class="row-odd"><td>harmonic_mean</td>
+<td>The harmonic mean, or NaN if any points are &lt;= 0.
+See <a class="reference external" href="http://en.wikipedia.org/wiki/Harmonic_mean">http://en.wikipedia.org/wiki/Harmonic_mean</a></td>
+</tr>
+<tr class="row-even"><td>expo_avgs</td>
+<td>A dictionary mapping exponential decay factors to current values.
+See <a class="reference external" href="http://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average">http://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average</a></td>
+</tr>
+<tr class="row-odd"><td>get_prev()</td>
+<td>The most recent data points.</td>
+</tr>
+<tr class="row-even"><td>get_topN()</td>
+<td>The largest data points</td>
+</tr>
+<tr class="row-odd"><td>window_avg</td>
+<td>The mean of the data points in get_prev().</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this headline">¶</a></h2>
+<p>Tracking the average number of items present each time a new item was added.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">faststat</span>
 
-<dl class="class">
-<dt id="faststat.faststat.Interval">
-<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Interval</tt><big>(</big><em>buckets=(100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 20000000, 50000000, 100000000, 200000000, 500000000, 1000000000, 2000000000, 5000000000L, 10000000000L, 20000000000L, 50000000000L, 100000000000L, 200000000000L, 500000000000L, 1000000000000L, 2000000000000L, 5000000000000L), lastN=64, percentiles=(0.25, 0.5, 0.75, 0.9, 0.95, 0.99), window_counts=[(64, 60000000000L), (32, 3600000000000L)]</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Interval"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Interval" title="Permalink to this definition">¶</a></dt>
-<dd><p>Call tick() to register occurrences.
-Note that calling tick() N times results in N-1 data points.</p>
-</dd></dl>
+<span class="k">class</span> <span class="nc">Queue</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+   <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">deq</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">put_stats</span> <span class="o">=</span> <span class="n">faststat</span><span class="o">.</span><span class="n">Stats</span><span class="p">()</span>
 
-<dl class="class">
-<dt id="faststat.faststat.Markov">
-<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Markov</tt><a class="reference internal" href="_modules/faststat/faststat.html#Markov"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Markov" title="Permalink to this definition">¶</a></dt>
-<dd><p>Represents the states of a Markov process.  The transition between states are
-modeled as Intervals, and the time spent in a given state is modeled as
-Durations.</p>
-<dl class="method">
-<dt id="faststat.faststat.Markov.transition">
-<tt class="descname">transition</tt><big>(</big><em>nxt</em>, <em>cur=None</em>, <em>since=None</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Markov.transition"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Markov.transition" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register that a transition has taken place.
-nxt is an identifier for the state being entered.
-cur is an identifier for the state being left.
-since is the time at which the previous state was entered.</p>
-</dd></dl>
+   <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">put_stats</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">deq</span><span class="p">))</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">deq</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
 
-</dd></dl>
-
-<dl class="class">
-<dt id="faststat.faststat.Sample">
-<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Sample</tt><big>(</big><em>sample_size=16384</em>, <em>type='f'</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Sample"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Sample" title="Permalink to this definition">¶</a></dt>
-<dd><p>This class implements Reservoir Sampling to keep a random sample of an infinite stream.
-See <a class="reference external" href="http://gregable.com/2007/10/reservoir-sampling.html">http://gregable.com/2007/10/reservoir-sampling.html</a> for one description.</p>
-<p>This class is kept separate from the other stats, because its memory usage is far greater.</p>
-</dd></dl>
-
-<dl class="class">
-<dt id="faststat.faststat.Stats">
-<em class="property">class </em><tt class="descclassname">faststat.faststat.</tt><tt class="descname">Stats</tt><big>(</big><em>buckets=(-1000000.0</em>, <em>-100000.0</em>, <em>-10000.0</em>, <em>-5000.0</em>, <em>-2000.0</em>, <em>-1000.0</em>, <em>-500</em>, <em>-200</em>, <em>-100</em>, <em>-50</em>, <em>-20</em>, <em>-10</em>, <em>-9</em>, <em>-8</em>, <em>-7</em>, <em>-6</em>, <em>-5</em>, <em>-4</em>, <em>-3</em>, <em>-2</em>, <em>-1</em>, <em>-0.5</em>, <em>-0.2</em>, <em>-0.1</em>, <em>-0.05</em>, <em>-0.02</em>, <em>-0.01</em>, <em>-0.001</em>, <em>-0.0001</em>, <em>-1e-05</em>, <em>0</em>, <em>0</em>, <em>0</em>, <em>1e-05</em>, <em>0.0001</em>, <em>0.001</em>, <em>0.01</em>, <em>0.02</em>, <em>0.05</em>, <em>0.1</em>, <em>0.2</em>, <em>0.5</em>, <em>1</em>, <em>2</em>, <em>3</em>, <em>4</em>, <em>5</em>, <em>6</em>, <em>7</em>, <em>8</em>, <em>9</em>, <em>10</em>, <em>20</em>, <em>50</em>, <em>100</em>, <em>200</em>, <em>500</em>, <em>1000.0</em>, <em>2000.0</em>, <em>5000.0</em>, <em>10000.0</em>, <em>100000.0</em>, <em>1000000.0)</em>, <em>lastN=64</em>, <em>percentiles=(0.25</em>, <em>0.5</em>, <em>0.75</em>, <em>0.9</em>, <em>0.95</em>, <em>0.99)</em>, <em>interval=True</em><big>)</big><a class="reference internal" href="_modules/faststat/faststat.html#Stats"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#faststat.faststat.Stats" title="Permalink to this definition">¶</a></dt>
-<dd><p>Call add(value) to add a data point.</p>
-</dd></dl>
-
+   <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+      <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">deq</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
 </div>
 
 
@@ -119,6 +174,16 @@ See <a class="reference external" href="http://gregable.com/2007/10/reservoir-sa
       </div>
       <div class="sphinxsidebar">
         <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">faststat</a><ul>
+<li><a class="reference internal" href="#basic-usage">Basic usage</a></li>
+<li><a class="reference internal" href="#collected-data">Collected data</a></li>
+<li><a class="reference internal" href="#examples">Examples</a></li>
+</ul>
+</li>
+</ul>
+
   <h3>This Page</h3>
   <ul class="this-page-menu">
     <li><a href="_sources/index.txt"
@@ -147,9 +212,6 @@ See <a class="reference external" href="http://gregable.com/2007/10/reservoir-sa
         <li class="right" style="margin-right: 10px">
           <a href="genindex.html" title="General Index"
              >index</a></li>
-        <li class="right" >
-          <a href="py-modindex.html" title="Python Module Index"
-             >modules</a> |</li>
         <li><a href="#">faststat 0.7 documentation</a> &raquo;</li> 
       </ul>
     </div>
