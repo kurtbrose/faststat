@@ -22,6 +22,12 @@ static unsigned long long _nanotime(void) {
     return result.QuadPart * 100;
 }
 
+// for old versions of MSVC which do not include NAN macro
+#ifndef NAN
+    static const unsigned long __nan[2] = {0xffffffff, 0x7fffffff};
+    #define NAN (*(const float *) __nan)
+#endif
+
 #elif defined linux
 //linux has clock_gettime(CLOCK_REALTIME) which is ns since epoch -- perfect
 #include <time.h>
