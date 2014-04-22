@@ -80,6 +80,18 @@ def biased_quantiles_f(r_i, n):
     return 2 * ERROR_RATE * r_i
 
 
+def targeted_quantiles_f(percentiles_errors):
+    def f(r_i, n):
+        bounds = []
+        for p, e in percentiles_errors:
+            if r_i < p * n:
+                bounds.append(2 * e * (n - r_i) / (1 - e))
+            else:
+                bounds.append(2 * e * r_i / p)
+        return min(bounds)
+    return f
+
+
 ERROR_RATE = 0.001
 COMPRESS_INTERVAL = int(1 / ERROR_RATE)
 
@@ -98,14 +110,20 @@ COMPRESS_INTERVAL = int(1 / ERROR_RATE)
 # performance of naive algorithm is very bad -- 300 - 700 microseconds
 # (0.3 to 0.7 ms).  this is about 20-40x slower than python piece-wise
 # parabolic algorithm;  ~300x slower than C piece-wise parabolic
-def test():
+def test(q=None):
     import random, time
 
     data = [random.normalvariate(1.0, 1.0) for i in range(int(1e4))]
-    q = Quantiles()
+    q = q or Quantiles()
     start = time.time()
     for d in data:
         q.insert(d)
     print (time.time() - start) * 1e6 / len(data), "microseconds per point"
     return q
+
+# about 400 microseconds per point
+def test_targeted():
+    TARGETS = ((0.25, 0.001), (0.5, 0.001), (0.75, 0.001), (0.9, 0.001), (0.95, 0.001), (0.99, 0.001))
+    f = targeted_quantiles_f(TARGETS)
+    return test(q=Quantiles(f))
 
