@@ -93,7 +93,7 @@ def targeted_quantiles_f(percentiles_errors):
 
 
 ERROR_RATE = 0.001
-COMPRESS_INTERVAL = int(1 / ERROR_RATE)
+COMPRESS_INTERVAL = 10 # int(1 / ERROR_RATE)
 
 # val is the current (approximate) value
 
@@ -121,9 +121,14 @@ def test(q=None):
     print (time.time() - start) * 1e6 / len(data), "microseconds per point"
     return q
 
-# about 400 microseconds per point
+# about 400 microseconds per point 
 def test_targeted():
     TARGETS = ((0.25, 0.001), (0.5, 0.001), (0.75, 0.001), (0.9, 0.001), (0.95, 0.001), (0.99, 0.001))
     f = targeted_quantiles_f(TARGETS)
     return test(q=Quantiles(f))
 
+if __name__ == "__main__":
+    print 'biased quantile condition'
+    test()
+    print 'targeted quantile condition'
+    test_targeted()
