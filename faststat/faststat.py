@@ -218,8 +218,6 @@ class Markov(object):
 
 
 TimeSeries = functools.partial(Stats, interval=False)
-
-
 nanotime = _faststat.nanotime
 
 
