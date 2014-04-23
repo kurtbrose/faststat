@@ -221,6 +221,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         }
         self->num_top = num_top;
         self->topN = PyMem_New(faststat_DataPoint, num_prev);
+        memset(self->topN, 0, sizeof(faststat_DataPoint) * num_prev);
         self->topN -= 1; //use 1 based indexing
 
         self->num_window_counts = num_window_counts;
