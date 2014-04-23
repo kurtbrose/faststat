@@ -202,8 +202,8 @@ class Markov(object):
     Durations.
     '''
     def __init__(self):
-        self.state_durations  = collections.defaultdict(faststat.Duration)
-        self.transition_intervals = collections.defaultdict(faststat.Interval)
+        self.state_durations  = collections.defaultdict(Duration)
+        self.transition_intervals = collections.defaultdict(Interval)
 
     def transition(self, nxt, cur=None, since=None):
         '''
