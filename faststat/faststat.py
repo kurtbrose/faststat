@@ -216,6 +216,34 @@ class Markov(object):
         if since:
             self.state_durations[cur].end(since)
 
+    def make_transitor(self, state):
+        '''
+        Creates and returns a new Markov.Transitor, in the passed state.
+        '''
+        return Markov.Transitor(self, state)
+
+    class Transitor(object):
+        '''
+        An extremely light-weight object that simply tracks a current
+        state and the time of the last transition.
+        '''
+        def __init__(self, markov, state):
+            self.markov = markov
+            self.state = state
+            self.markov.transition(state)
+            self.last_transition = nanotime()
+
+        def transition(self, state):
+            '''
+            Notify the parent Markov stats object of a transition
+            from the current state to the passed state.
+            '''
+            self.markov.transition(state, self.state, self.last_transition)
+            self.last_transition, self.state = nanotime(), state
+
+        def __repr__(self):
+            return '<faststat.Markov.Transitor({0})>'.format(self.state)
+
 
 TimeSeries = functools.partial(Stats, interval=False)
 nanotime = _faststat.nanotime
