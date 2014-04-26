@@ -204,8 +204,10 @@ class Markov(object):
     def __init__(self):
         self.state_durations  = collections.defaultdict(Duration)
         self.transition_intervals = collections.defaultdict(Interval)
-
-    def transition(self, nxt, cur=None, since=None):
+        self.transitor_states = collections.defaultdict(weakref.WeakSet)
+        self.state_counts = collections.defaultdict(functools.partial(Stats, interval=False))
+ 
+    def _transition(self, nxt, cur=None, since=None):
         '''
         Register that a transition has taken place.
         nxt is an identifier for the state being entered.
@@ -215,13 +217,13 @@ class Markov(object):
         self.transition_intervals[(cur, nxt)].tick()
         if since:
             self.state_durations[cur].end(since)
-
+ 
     def make_transitor(self, state):
         '''
         Creates and returns a new Markov.Transitor, in the passed state.
         '''
         return Markov.Transitor(self, state)
-
+ 
     class Transitor(object):
         '''
         An extremely light-weight object that simply tracks a current
@@ -230,17 +232,26 @@ class Markov(object):
         def __init__(self, markov, state):
             self.markov = markov
             self.state = state
-            self.markov.transition(state)
+            self.markov._transition(state)
+            state_set = self.markov.transitor_states[state]
+            state_set.add(self)
+            self.markov.state_counts[state].add(len(state_set))
             self.last_transition = nanotime()
-
+ 
         def transition(self, state):
             '''
             Notify the parent Markov stats object of a transition
             from the current state to the passed state.
             '''
-            self.markov.transition(state, self.state, self.last_transition)
+            old_state_set = self.markov.transitor_states[self.state]
+            new_state_set = self.markov.transitor_states[state]
+            old_state_set.remove(self)
+            new_state_set.add(self)
+            self.markov.state_counts[self.state].add(len(old_state_set))
+            self.markov.state_counts[state].add(len(new_state_set))
+            self.markov._transition(state, self.state, self.last_transition)
             self.last_transition, self.state = nanotime(), state
-
+ 
         def __repr__(self):
             return '<faststat.Markov.Transitor({0})>'.format(self.state)
 
