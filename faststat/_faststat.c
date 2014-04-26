@@ -281,32 +281,28 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
     }
 }
 
-
+#define STR_VAL(arg) #arg
+#define DBL_MEMBER(name, description) {STR_VAL(name), T_DOUBLE, offsetof(faststat_Stats, name), 0, description}
+#define DBL_MEMBER1(name) {STR_VAL(name), T_DOUBLE, offsetof(faststat_Stats, name), 0, STR_VAL(name)}
+#define MEMBER(name, type, description) {STR_VAL(name), type, offsetof(faststat_Stats, name), 0, description}
 static PyMemberDef faststat_Stats_members[] = {
-    {"n", T_UINT, offsetof(faststat_Stats, n), READONLY, "numder of points"},
-    {"mean", T_DOUBLE, offsetof(faststat_Stats, mean), READONLY, "mean"},
-    {"min", T_DOUBLE, offsetof(faststat_Stats, min), READONLY, "min"},
-    {"max", T_DOUBLE, offsetof(faststat_Stats, max), READONLY, "max"},
-    {"sum_of_logs", T_DOUBLE, offsetof(faststat_Stats, sum_of_logs), READONLY, 
-        "sum of logs of values, provided all values were positive definite, else NaN (userful for geometric mean)"},
-    {"sum_of_inv", T_DOUBLE, offsetof(faststat_Stats, sum_of_inv), READONLY,
-        "sum of inverses of values, provided all were positive definite, else NaN (useful for harmonic mean)"},    
-    {"lasttime", T_ULONGLONG, offsetof(faststat_Stats, lasttime), READONLY,
-                      "time (in nanoseconds since epoch) of last call to add"},
-    {"mintime", T_ULONGLONG, offsetof(faststat_Stats, mintime), READONLY, 
-                      "time (in nanoseconds since epoch) that minimum value was seen"},
-    {"maxtime", T_ULONGLONG, offsetof(faststat_Stats, maxtime), READONLY,
-                      "time (in nanoseconds since epoch) that maximum value was seen"},
-    {"m2", T_DOUBLE, offsetof(faststat_Stats, m2), READONLY, "m2"},
-    {"m3", T_DOUBLE, offsetof(faststat_Stats, m3), READONLY, "m3"},
-    {"m4", T_DOUBLE, offsetof(faststat_Stats, m4), READONLY, "m4"},
-    {"interval", T_OBJECT, offsetof(faststat_Stats, interval), READONLY, "interval"},
-    {"window_avg", T_DOUBLE, offsetof(faststat_Stats, window_avg), READONLY, 
-        "average of stored most recent data points"},
-    {"num_prev", T_ULONG, offsetof(faststat_Stats, num_prev), READONLY,
-        "number of most recent data points stored (accessible via get_prev() )"},
+    MEMBER(n, T_UINT, "number of points"),
+    DBL_MEMBER1(mean), DBL_MEMBER1(min), DBL_MEMBER1(max),
+    DBL_MEMBER(sum_of_logs, "sum of logs of values, for geometric mean; NaN if undefined"),
+    DBL_MEMBER(sum_of_inv, "sum of inverses or values, for harmonic mean; NaN if undefined"),
+    MEMBER(lasttime, T_ULONGLONG, "time (in nanoseconds since epoch) of last point"),
+    MEMBER(mintime, T_ULONGLONG, "time (in nanoseconds since epoch) of min value"),
+    MEMBER(maxtime, T_ULONGLONG, "time (in nanoseconds since epoch) of max value"),
+    DBL_MEMBER1(m2), DBL_MEMBER1(m3), DBL_MEMBER1(m4),
+    MEMBER(interval, T_OBJECT, "another Stat object which measures the time interval between data points"),
+    DBL_MEMBER(window_avg, "average of stored most recent data points"),
+    MEMBER(num_prev, T_ULONG, "number of most recent data points stored (accessible via get_prev() )"),
     {NULL}
 };
+#undef MEMBER
+#undef DBL_MEMBER
+#undef DBL_MEMBER1
+#undef STR_VAL
 
 
 //update mean, and second third and fourth moments
