@@ -78,6 +78,15 @@ window_avg      The mean of the data points in get_prev().
 =============== ====================================================================================
 
 
+Error
+-----
+
+There is no proven error bound on the algorithm used to calculate percentiles.  However, empirically
+the error is observed to be low.  It is worth noting that the percentile algorithm used (P2) performs
+interpolation of values.  Therefore for a sequence consisting of ~50% 1's and ~50% 2's, the algorithm
+would report a median around 1.5.
+
+
 Examples
 --------
 
