@@ -63,6 +63,7 @@ static unsigned long long nanotime(void) {
     return _nanotime();
 }
 
+
 //percentile point for usage in P2 algorithm
 typedef struct {
     unsigned short percentile;  //divide by 0xFFFF to get a float between 0 and 1
@@ -847,12 +848,72 @@ static PyObject* pynanotime_override(PyObject *_, PyObject *args) {
     return Py_None;
 }
 
+static unsigned long long _lfsr_64(unsigned long long lfsr) { 
+    return (((lfsr) >> 1) ^ (-((lfsr) & 1ull) & 0xB300000000000001ull));
+}
+
+unsigned char _LFSR_64_LO_LUT[256];
+unsigned char _LFSR_64_HI_LUT[256];
+
+static void _init_lfsr_64_lut() {
+    int i, j;
+    unsigned long long cur;
+    for(i=0; i<256; i++) {
+        cur = i;
+        for(j=0; j<8; j++) {
+            cur = _lfsr_64(cur);
+        }
+        _LFSR_64_LO_LUT[i] = (cur >> (8*6)) & 0xFF;
+        _LFSR_64_HI_LUT[i] = (cur >> (8*7)) & 0xFF;
+    }
+}
+
+typedef union lfsr_val {
+    unsigned long long ull_val;
+    unsigned char bytes_val[8];
+} LFSR_VAL;
+
+// magic byte constants are derived from above LFSR
+static unsigned long long _lfsr_64_fast(unsigned long long lfsr) {
+    LFSR_VAL input, output;
+    input.ull_val = lfsr;
+    output.bytes_val[0] = _LFSR_64_HI_LUT[input.bytes_val[1]];
+    output.bytes_val[1] = _LFSR_64_HI_LUT[input.bytes_val[2]] ^ _LFSR_64_LO_LUT[input.bytes_val[1]];
+    output.bytes_val[2] = _LFSR_64_HI_LUT[input.bytes_val[3]] ^ _LFSR_64_LO_LUT[input.bytes_val[2]];
+    output.bytes_val[3] = _LFSR_64_HI_LUT[input.bytes_val[4]] ^ _LFSR_64_LO_LUT[input.bytes_val[3]];
+    output.bytes_val[4] = _LFSR_64_HI_LUT[input.bytes_val[5]] ^ _LFSR_64_LO_LUT[input.bytes_val[4]];
+    output.bytes_val[5] = _LFSR_64_HI_LUT[input.bytes_val[6]] ^ _LFSR_64_LO_LUT[input.bytes_val[5]];
+    output.bytes_val[6] = _LFSR_64_HI_LUT[input.bytes_val[7]] ^ _LFSR_64_LO_LUT[input.bytes_val[6]];
+    output.bytes_val[7] =                 input.bytes_val[0]  ^ _LFSR_64_LO_LUT[input.bytes_val[7]];
+    return output.ull_val;
+}
+
+static PyObject* test(PyObject *_, PyObject *args) {
+    int i;
+    unsigned long long val, duration;
+    val = 1;
+    duration = nanotime();
+    for(i=0; (i & 0x1000000) == 0; i++) {
+        if(_lfsr_64(val) != _lfsr_64_fast(val)){
+            printf("ERROR!");
+            break;
+        }
+        val = _lfsr_64(val);
+    }
+    duration = nanotime() - duration;
+    printf("\ncompleted %d rounds in %f seconds (val=%lx)\n", i, duration/1e9, (unsigned long)val);
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 
 static PyMethodDef module_methods[] = { 
     {"nanotime", (PyCFunction)pynanotime, METH_NOARGS, 
         "get integral nanoseconds since unix epoch"},
     {"_nanotime_override", (PyCFunction)pynanotime_override, METH_VARARGS,
         "override time seen by all faststat operations, useful for testing time based algoritmhs"},
+    {"_test", (PyCFunction)test, METH_NOARGS,
+        "development hook for doing C-level experiments"},
     {NULL} };
 
 
