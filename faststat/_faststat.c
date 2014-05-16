@@ -63,13 +63,6 @@ static unsigned long long nanotime(void) {
     return _nanotime();
 }
 
-//percentile point for usage in P2 algorithm
-typedef struct {
-    unsigned short percentile;  //divide by 0xFFFF to get a float between 0 and 1
-    double val;  //estimate of current percentile value
-    unsigned int n;  //estimate of how many values were less than this
-} faststat_P2Percentile;
-
 
 typedef struct {
     float max;
@@ -100,6 +93,25 @@ typedef struct {
 } faststat_WindowCount;
 
 
+typedef struct {
+    short next;
+    short padddd;
+    float min;
+    unsigned long long count;
+} Qdigest_node;
+
+
+typedef struct {
+    int k;
+    char log2_k;
+    short free_head;
+    short free_tail;
+    short generations[32];
+    Qdigest_node *nodes;
+    float *input_buffer;
+} Qdigest;
+
+
 // for representing a normally distributed variable
 typedef struct faststat_Stats_struct {
     PyObject_HEAD
@@ -107,10 +119,6 @@ typedef struct faststat_Stats_struct {
     double mean, min, max, m2, m3, m4;
     double sum_of_logs, sum_of_inv;  // for geometric and harmonic mean
     unsigned long long mintime, maxtime, lasttime;
-    unsigned int num_percentiles;
-    faststat_P2Percentile *percentiles;
-    unsigned int num_buckets;
-    faststat_Bucket *buckets; // last bucket MUST BE +inf
     unsigned int num_expo_avgs;
     faststat_ExpoAvg *expo_avgs;
     double window_avg;
@@ -173,28 +181,6 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
             self->interval = (faststat_Stats*)interval; // WARNING: incompatible pointer type..
         } else {                 // TODO: figure out a better test of type here
             self->interval = NULL;
-        }
-        if(num_percentiles) {
-            self->percentiles = PyMem_New(faststat_P2Percentile, num_percentiles);
-            for(i=0; i<num_percentiles; i++) {
-                temp = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(percentiles, i));
-                self->percentiles[i].percentile = (unsigned short)(temp * 0x10000);
-                self->percentiles[i].val = 0;
-                self->percentiles[i].n = i + 1;
-            }
-        } else {
-            self->percentiles = NULL;
-        }
-        self->num_buckets = num_buckets;
-        if(num_buckets) {
-            self->buckets = PyMem_New(faststat_Bucket, num_buckets);
-            for(i=0; i<num_buckets; i++) {
-                self->buckets[i].count = 0;
-                self->buckets[i].max = (float)PyFloat_AsDouble(PySequence_Fast_GET_ITEM(buckets, i));
-                // don't bother checking for error; let it raise later
-            }
-        } else {
-            self->buckets = NULL;
         }
         self->num_expo_avgs = num_expo_avgs;
         if(num_expo_avgs) {
@@ -262,12 +248,6 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
 
 
 static void faststat_Stats_dealloc(faststat_Stats* self) {
-    if(self->percentiles) {
-        PyMem_Del(self->percentiles);
-    }
-    if(self->buckets) {
-        PyMem_Del(self->buckets);
-    }
     if(self->expo_avgs) {
         PyMem_Del(self->expo_avgs);
     }
@@ -305,6 +285,119 @@ static PyMemberDef faststat_Stats_members[] = {
 #undef STR_VAL
 
 
+static inline short _qdigest_alloc(Qdigest *q) {
+    short next;
+    next = q->free_head;
+    q->free_head = q->nodes[free_head].next;
+    return next;
+}
+
+static inline void _qdigest_free(Qdigest *q, short index) {
+    q->nodes[free_tail].next = index;
+    q->free_tail = index;
+}
+
+static inline short _nums2qnodes(Qdigest *q) {
+    short ret;
+    size_t i;
+    Qdigest_node *nodes, head, cur;
+    float cur_num;
+    qsort();
+    nodes = q->nodes;
+    ret = _qdigest_alloc(q);
+    head = nodes + ret;
+    head->next = -1;
+    head->min = q->input_buffer[0];
+    head->count = 1;
+    cur = head;
+    for(i=1; i < q->k; i++) {
+        cur_num = q->input_buffer[i];
+        if(cur_num == cur->min) {
+            cur->count++;
+        } else {
+            cur->next = _qdigest_alloc(q);
+            cur = nodes + cur->next;
+            cur->min = cur_num;
+            cur->next = -1;
+            cur->count = 1;
+        }
+    }
+    return ret;
+}
+
+//merge two qnode lists, maintaining ascending order
+static inline short _merge_qnode_lists(Qdigest *q, short a, short b) {
+    Qdigest_node *nodes;
+    short head, tail, freed;
+    nodes = q->nodes;
+    if(nodes[a].min < nodes[b].min) { // a is smaller, it should be head
+        head = a;
+        a = nodes[a].next;
+    } else if(nodes[a].min > nodes[b].min) { // b is smaller, it should be head
+        head = b;
+        b = nodes[b].next;
+    } else {
+            head = a;
+            nodes[a].count += nodes[b].count
+            a = nodes[a].next;
+            freed = b;
+            b = nodes[b].next;
+            _qdigest_free(q, freed);
+        }
+    tail = head;
+    while(a != -1 && b != -1) {
+        if(nodes[a].min < nodes[b].min) {
+            nodes[tail].next = a;
+            a = nodes[a].next;
+        } else if(nodes[a].min > nodes[b].min) {
+            nodes[tail].next = b;
+            b = nodes[b].next;
+        } else {
+            nodes[tail].next = a;
+            nodes[a].count += nodes[b].count
+            a = nodes[a].next;
+            freed = b;
+            b = nodes[b].next;
+            _qdigest_free(q, freed);
+        }
+        tail = nodes[tail].next;
+    }
+    //append any leftover nodes to the end of the list
+    //if there aren't any leftover nodes, set tail.next to -1
+    nodes[tail].next = b == -1 ? a : b;
+    return head;
+}
+
+static inline _compress_generation(Qdigest *q, short nodes, short parents, char generation) {
+    unsigned int mask;
+    short nodes_cur, parents_cur;
+
+    mask = 0xFFFFFFFF - ((1 << (generation + 2)) - 1);
+
+
+}
+
+static void _update_qdigest(faststat_Stats *self, double x) {
+    int k;
+    unsigned long long n;
+    short new_nodes;
+    n = self->n;
+    k = self->qdigest.k;
+    self->qdigest.input_buffer[(n - 1) >> self->qdigest.log2k] = (float)x;
+    if(n >> self->qdigest.log2k != 0) {
+        return;
+    }
+    // if n/k is an integer, it is time to compress!
+    new_nodes = _nums2qnodes(&(self->qdigest));
+    self->qdigest.generations[0] = _merge_qnode_lists(
+        &(self->qdigest), self->qdigest.generations[0], new_nodes);
+
+    
+
+
+}
+
+
 //update mean, and second third and fourth moments
 static void _update_moments(faststat_Stats *self, double x) {
     double n, delta, delta_n, delta_m2, delta_m3, delta_m4;
@@ -323,110 +416,6 @@ static void _update_moments(faststat_Stats *self, double x) {
     self->m2 += delta_m2;
 }
 
-
-//helper for _update_percentiles
-static void _p2_update_point(double l_v, double l_n, faststat_P2Percentile *cur,
-                            double r_v, double r_n, unsigned long long n) {
-    int d;
-    double percentile, new_val, c_v, c_n, diff;
-    percentile = ((double)cur->percentile) / 0x10000;
-    c_n = cur->n;
-    diff = (n - 1) * percentile + 1 - c_n;
-    // clamp d at +/- 1
-    if(diff >= 1) {
-        d = 1;
-    } else if(diff <= -1) {
-        d = -1;
-    } else {
-        return;
-    }
-    c_v = cur->val;
-    if(l_n < c_n + d && c_n + d < r_n) {  // try updating estimate with parabolic
-        new_val = c_v + (d / (r_n - l_n)) * ( 
-            (c_n - l_n + d) * (r_v - c_v) / (r_n - c_n) +
-            (r_n - c_n - d) * (c_v - l_v) / (c_n - l_n));
-        if(l_v >= new_val || r_v <= new_val) {  // fall back on linear
-            if(d == 1) {
-                new_val = c_v + (r_v - c_v) / (r_n - c_n);
-            } else {  // d == -1
-                new_val = c_v - (l_v - c_v) / (l_n - c_n);
-            }
-        }
-        cur->val = new_val;
-        cur->n += d;
-    }
-}
-
-
-static void _insert_percentile_sorted(faststat_Stats *self, double x) {
-    unsigned long long num, i;  // prevent loss of precision compiler warning
-    double tmp;
-    num = self->n < self->num_percentiles ? self->n : self->num_percentiles;
-    for(i = 0; i < num-1; i++) { //insert in sorted order
-        if(x < self->percentiles[i].val) {
-            tmp = x;
-            x = self->percentiles[i].val;
-            self->percentiles[i].val = tmp;
-        }
-    }
-    self->percentiles[num-1].val = x;
-}
-
-
-//update percentiles using piece-wise parametric algorithm
-static void _update_percentiles(faststat_Stats *self, double x) {
-    unsigned int i;
-    //double percentile; //TODO: remove me
-    faststat_P2Percentile *right, *left, *cur, *prev, *nxt;
-    right = &(self->percentiles[self->num_percentiles-1]);
-    left = &(self->percentiles[0]);
-    if(!(right->n < self->n) ) { // just insert until self->n > self->num_percentiles
-        _insert_percentile_sorted(self, x);
-        return;
-    }
-    //right-most is stopping case; handle first
-    if(x < right->val && right->n + 1 < self->n) {
-        right->n++;
-    }
-    //handle the rest of the points
-    prev = right;
-    for(i = self->num_percentiles-2; ; i--) {
-        cur = &(self->percentiles[i]);
-        if(x < cur->val && cur->n + 1 < prev->n) {
-            cur->n++;
-        }
-        prev = cur;
-        if(i == 0) { //making i unsigned fixes some warnings
-            break;
-        }
-    }
-    //left-most point is a special case
-    nxt = &(self->percentiles[1]);
-    _p2_update_point(self->min, 0, left, nxt->val, nxt->n, self->n);
-    cur = left;
-    for(i=1; i < self->num_percentiles - 1; i++) {
-        prev = cur;
-        cur = nxt;
-        nxt = &(self->percentiles[i+1]);
-        _p2_update_point(prev->val, prev->n, cur, nxt->val, nxt->n, self->n);
-    }
-    _p2_update_point(cur->val, cur->n, right, (double)self->max, (double)self->n, self->n);
-} 
-
-// be careful; if-condition must properly terminate when max == +inf, even for nan and +inf
-#define OFFSET(n)  if(!(x >= self->buckets[i+n].max)) { self->buckets[i+n].count++; break; } 
-
-static void _update_buckets(faststat_Stats *self, double x) {
-    unsigned int i;
-    for(i=0; ; i += 16) {
-        OFFSET( 0) OFFSET( 1) OFFSET( 2) OFFSET( 3) 
-        OFFSET( 4) OFFSET( 5) OFFSET( 6) OFFSET( 7) 
-        OFFSET( 8) OFFSET( 9) OFFSET(10) OFFSET(11) 
-        OFFSET(12) OFFSET(13) OFFSET(14) OFFSET(15)
-    }
-}
-
-#undef OFFSET
 
 static void _update_lastN(faststat_Stats *self, double x) {
     unsigned int offset;
@@ -557,7 +546,6 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
     self->sum_of_inv += x > 0 ? 1 / x : NAN;
     _update_moments(self, x);
     _update_percentiles(self, x);
-    _update_buckets(self, x);
     _update_expo_avgs(self, x);
     _update_lastN(self, x);
     _update_window_counts(self, t);
@@ -621,31 +609,6 @@ static PyObject* faststat_Stats_tick(faststat_Stats *self, PyObject *args) {
     if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
-}
-
-
-static PyObject* faststat_Stats_get_percentiles(faststat_Stats* self, PyObject *args) {
-    PyObject *p_dict;
-    faststat_P2Percentile *cur;
-    double cur_val;
-    unsigned int i;
-    p_dict = PyDict_New();
-    for(i = 0; i < self->num_percentiles; i++) {
-        cur = &(self->percentiles[i]);
-        cur_val = ((double)cur->percentile) / 0x10000;
-        cur_val = floor(10000 * cur_val + 0.5) / 10000;  
-        //re-round to handle slop from being 16 bit number
-        // (note: windows math.h does not include round; use floor)
-        PyDict_SetItem(
-            p_dict, 
-            PyFloat_FromDouble(cur_val), 
-            PyFloat_FromDouble(cur->val));
-    }
-    if(PyErr_Occurred()) { 
-        Py_DECREF(p_dict);
-        return NULL; 
-    }
-    return p_dict;
 }
 
 
