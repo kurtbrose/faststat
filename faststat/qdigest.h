@@ -4,6 +4,10 @@ Several percentile algorithms
 
 */
 
+#ifdef _WIN32
+#define inline __inline
+#endif
+
 typedef struct {
     short next;
     short padddd;
@@ -29,13 +33,13 @@ typedef struct {
 static inline short qdigest_alloc(Qdigest *q) {
     short next;
     next = q->free_head;
-    q->free_head = q->nodes[free_head].next;
+    q->free_head = q->nodes[q->free_head].next;
     q->num_free--;
     return next;
 }
 
 static inline void qdigest_free(Qdigest *q, short index) {
-    q->nodes[free_tail].next = index;
+    q->nodes[q->free_tail].next = index;
     q->free_tail = index;
     q->num_free++;
 }
@@ -43,11 +47,11 @@ static inline void qdigest_free(Qdigest *q, short index) {
 static inline short nums2qnodes(Qdigest *q) {
     short ret;
     size_t i;
-    Qdigest_node *nodes, head, cur;
+    Qdigest_node *nodes, *head, *cur;
     int cur_num;
-    qsort();
+    //qsort();
     nodes = q->nodes;
-    ret = _qdigest_alloc(q);
+    ret = qdigest_alloc(q);
     head = nodes + ret;
     head->next = 0;
     head->min = q->input_buffer[0];
@@ -58,7 +62,7 @@ static inline short nums2qnodes(Qdigest *q) {
         if(cur_num == cur->min) {
             cur->count++;
         } else {
-            cur->next = _qdigest_alloc(q);
+            cur->next = qdigest_alloc(q);
             cur = nodes + cur->next;
             cur->min = cur_num;
             cur->next = 0;
@@ -81,11 +85,11 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
         b = nodes[b].next;
     } else {
             head = a;
-            nodes[a].count += nodes[b].count
+            nodes[a].count += nodes[b].count;
             a = nodes[a].next;
             freed = b;
             b = nodes[b].next;
-            _qdigest_free(q, freed);
+            qdigest_free(q, freed);
         }
     tail = head;
     while(a && b) {
@@ -97,11 +101,11 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
             b = nodes[b].next;
         } else {
             nodes[tail].next = a;
-            nodes[a].count += nodes[b].count
+            nodes[a].count += nodes[b].count;
             a = nodes[a].next;
             freed = b;
             b = nodes[b].next;
-            _qdigest_free(q, freed);
+            qdigest_free(q, freed);
         }
         tail = nodes[tail].next;
     }
@@ -111,15 +115,14 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     return head;
 }
 
-static inline short[2] compress_generation(Qdigest *q, short cur_nodes, short parents, char generation) {
+static inline void compress_generation(Qdigest *q, short cur_nodes, short parents, char generation) {
     unsigned int mask;
-    short cur, parents_cur, sibling, parent, parents_prev, prev;
+    short cur, parents_cur, sibling, parent, parents_prev, prev, next;
     unsigned long long count;
     unsigned long long min_count;
     int target; // number to be freed
     Qdigest_node *nodes;
 
-    target = q-> k - q->num_free;
     nodes = q->nodes;
     min_count = q->n / q->k;
     cur = cur_nodes;
@@ -130,18 +133,18 @@ static inline short[2] compress_generation(Qdigest *q, short cur_nodes, short pa
 
     while(cur) {
         // test if current node has a sibling
-        if(nodes[cur].next && nodes[cur].min & mask == nodes[nodes[cur].next] & mask) {
+        if(nodes[cur].next && (nodes[cur].min & mask) == (nodes[nodes[cur].next].min & mask)) {
             sibling = nodes[cur].next;
         } else {
             sibling = 0;
         }
         // walk parents to the last one that could possibly be cur parent
-        while(parents_cur && nodes[cur] & mask > nodes[parents_cur].min) {
+        while(parents_cur && (nodes[cur].min & mask) > nodes[parents_cur].min) {
             parents_prev = parents_cur;
             parents_cur = nodes[parents_cur].next;
         }
         // test if current node has a parent
-        if(parents_cur && nodes[parents_cur].min == nodes[cur].min & mask) {
+        if(parents_cur && nodes[parents_cur].min == (nodes[cur].min & mask)) {
             parent = parents_cur;
         } else {
             parent = 0;
@@ -159,11 +162,11 @@ static inline short[2] compress_generation(Qdigest *q, short cur_nodes, short pa
                 cur_nodes = next;
             }
             // throw away sibling if one exists
-            if(sibling) { _qdigest_free(q, sibling); }
+            if(sibling) { qdigest_free(q, sibling); }
             // if there is a parent, throw away cur as well
             if(parent) {
                 nodes[parent].count = count;
-                _qdigest_free(q, cur);
+                qdigest_free(q, cur);
             } else {
                 nodes[cur].count = count;
                 // reduce granularity to next generation up's
@@ -178,29 +181,26 @@ static inline short[2] compress_generation(Qdigest *q, short cur_nodes, short pa
                 parents_prev = cur;
             }
             // check if we still need to free more nodes
-            target--;
-            if(!target) { break; }
+            if(q->k <= q->num_free) { break; }
         } else { // if nothing merged, advance the prev pointer
             prev = sibling ? sibling : cur;
         }
         cur = next;
     }
-
-    return {cur_nodes, parents}
+    q->generations[generation] = cur_nodes;
+    q->generations[generation + 1] = parents;
 }
 
-static inline void compress(QDigest *q) {
+static inline void compress(Qdigest *q) {
     char i;
-    short new_heads[2];
+    short new_nodes;
     new_nodes = sort_and_compress(q, q->new_head);
     q->new_head = q->new_tail = 0;
     q->generations[0] = merge_qnode_lists(
         q, q->generations[0], new_nodes);
-    for(i=0; q->num_free < q->k and i < 31; i++) {
-        if(q->generations[gen_i] == 0) { continue; }
-        new_heads = compress_generation(q, q->generations[i], q->generations[i+1], i);
-        q->generations[i] = new_heads[0];
-        q->generations[i + 1] = new_heads[1];
+    for(i=0; q->num_free < q->k && i < 31; i++) {
+        if(q->generations[i] == 0) { continue; }
+        compress_generation(q, q->generations[i], q->generations[i+1], i);
     }
 }
 
@@ -209,7 +209,7 @@ static union converter {
     int intval;
     float floatval;
     char bytesval[4];
-}
+};
 
 void qdigest_update(Qdigest *q, float x) {
     short new_node;
@@ -219,7 +219,7 @@ void qdigest_update(Qdigest *q, float x) {
     }
     new_node = qdigest_alloc(q);
     convert.floatval = x;
-    new_node.min = convert.intval;
+    q->nodes[new_node].min = convert.intval;
     if(q->new_tail) {
         q->nodes[q->new_tail].next = new_node;
         q->new_tail = new_node;
