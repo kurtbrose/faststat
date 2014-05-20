@@ -1,7 +1,7 @@
 import platform
 from distutils.core import setup, Extension
 
-_faststat = Extension('_faststat', sources=['faststat/_faststat.c'], 
+_faststat = Extension('_faststat', sources=['faststat/_faststat.c'], include_dirs=['faststat'], 
                       libraries=[] if platform.system() in ['Windows', 'Darwin'] else ['rt',])
 
 setup(

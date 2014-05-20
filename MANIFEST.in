@@ -1,1 +1,1 @@
-recursive-include faststat *.py *.c
+recursive-include faststat *.py *.c *.h

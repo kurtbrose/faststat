@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <math.h>
 
+#include <qdigest.h>
+
 //define gettime() which returns integral nanoseconds since epoch
 //as a 64 bit integer for a variety of platforms
 #ifdef _WIN32
@@ -92,26 +94,6 @@ typedef struct {
     unsigned int *counts;  // counts for the previous num_windows intervals
 } faststat_WindowCount;
 
-
-typedef struct {
-    short next;
-    short padddd;
-    float min;
-    unsigned long long count;
-} Qdigest_node;
-
-
-typedef struct {
-    int k;
-    char log2_k;
-    short free_head;
-    short free_tail;
-    short generations[32];
-    Qdigest_node *nodes;
-    float *input_buffer;
-} Qdigest;
-
-
 // for representing a normally distributed variable
 typedef struct faststat_Stats_struct {
     PyObject_HEAD
@@ -133,13 +115,6 @@ typedef struct faststat_Stats_struct {
     struct faststat_Stats_struct *interval;
 } faststat_Stats;
 
-/*
-typedef struct {
-    unsigned int n;
-    unsigned int num_prev;
-
-} faststat_StatsGroup;
-*/
 
 char* NEW_ARGS[] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", 
     "window_counts", "num_top", NULL};
@@ -283,120 +258,6 @@ static PyMemberDef faststat_Stats_members[] = {
 #undef DBL_MEMBER
 #undef DBL_MEMBER1
 #undef STR_VAL
-
-
-static inline short _qdigest_alloc(Qdigest *q) {
-    short next;
-    next = q->free_head;
-    q->free_head = q->nodes[free_head].next;
-    return next;
-}
-
-static inline void _qdigest_free(Qdigest *q, short index) {
-    q->nodes[free_tail].next = index;
-    q->free_tail = index;
-}
-
-static inline short _nums2qnodes(Qdigest *q) {
-    short ret;
-    size_t i;
-    Qdigest_node *nodes, head, cur;
-    float cur_num;
-    qsort();
-    nodes = q->nodes;
-    ret = _qdigest_alloc(q);
-    head = nodes + ret;
-    head->next = -1;
-    head->min = q->input_buffer[0];
-    head->count = 1;
-    cur = head;
-    for(i=1; i < q->k; i++) {
-        cur_num = q->input_buffer[i];
-        if(cur_num == cur->min) {
-            cur->count++;
-        } else {
-            cur->next = _qdigest_alloc(q);
-            cur = nodes + cur->next;
-            cur->min = cur_num;
-            cur->next = -1;
-            cur->count = 1;
-        }
-    }
-    return ret;
-}
-
-//merge two qnode lists, maintaining ascending order
-static inline short _merge_qnode_lists(Qdigest *q, short a, short b) {
-    Qdigest_node *nodes;
-    short head, tail, freed;
-    nodes = q->nodes;
-    if(nodes[a].min < nodes[b].min) { // a is smaller, it should be head
-        head = a;
-        a = nodes[a].next;
-    } else if(nodes[a].min > nodes[b].min) { // b is smaller, it should be head
-        head = b;
-        b = nodes[b].next;
-    } else {
-            head = a;
-            nodes[a].count += nodes[b].count
-            a = nodes[a].next;
-            freed = b;
-            b = nodes[b].next;
-            _qdigest_free(q, freed);
-        }
-    tail = head;
-    while(a != -1 && b != -1) {
-        if(nodes[a].min < nodes[b].min) {
-            nodes[tail].next = a;
-            a = nodes[a].next;
-        } else if(nodes[a].min > nodes[b].min) {
-            nodes[tail].next = b;
-            b = nodes[b].next;
-        } else {
-            nodes[tail].next = a;
-            nodes[a].count += nodes[b].count
-            a = nodes[a].next;
-            freed = b;
-            b = nodes[b].next;
-            _qdigest_free(q, freed);
-        }
-        tail = nodes[tail].next;
-    }
-    //append any leftover nodes to the end of the list
-    //if there aren't any leftover nodes, set tail.next to -1
-    nodes[tail].next = b == -1 ? a : b;
-    return head;
-}
-
-static inline _compress_generation(Qdigest *q, short nodes, short parents, char generation) {
-    unsigned int mask;
-    short nodes_cur, parents_cur;
-
-    mask = 0xFFFFFFFF - ((1 << (generation + 2)) - 1);
-
-
-}
-
-static void _update_qdigest(faststat_Stats *self, double x) {
-    int k;
-    unsigned long long n;
-    short new_nodes;
-    n = self->n;
-    k = self->qdigest.k;
-    self->qdigest.input_buffer[(n - 1) >> self->qdigest.log2k] = (float)x;
-    if(n >> self->qdigest.log2k != 0) {
-        return;
-    }
-    // if n/k is an integer, it is time to compress!
-    new_nodes = _nums2qnodes(&(self->qdigest));
-    self->qdigest.generations[0] = _merge_qnode_lists(
-        &(self->qdigest), self->qdigest.generations[0], new_nodes);
-
-    
-
-
-}
-
 
 //update mean, and second third and fourth moments
 static void _update_moments(faststat_Stats *self, double x) {
