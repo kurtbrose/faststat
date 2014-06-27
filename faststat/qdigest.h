@@ -44,34 +44,6 @@ static inline void qdigest_free(Qdigest *q, short index) {
     q->num_free++;
 }
 
-static inline short nums2qnodes(Qdigest *q) {
-    short ret;
-    size_t i;
-    Qdigest_node *nodes, *head, *cur;
-    int cur_num;
-    //qsort();
-    nodes = q->nodes;
-    ret = qdigest_alloc(q);
-    head = nodes + ret;
-    head->next = 0;
-    head->min = q->input_buffer[0];
-    head->count = 1;
-    cur = head;
-    for(i=1; i < q->k; i++) {
-        cur_num = q->input_buffer[i];
-        if(cur_num == cur->min) {
-            cur->count++;
-        } else {
-            cur->next = qdigest_alloc(q);
-            cur = nodes + cur->next;
-            cur->min = cur_num;
-            cur->next = 0;
-            cur->count = 1;
-        }
-    }
-    return ret;
-}
-
 //merge two qnode lists, maintaining ascending order
 static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     Qdigest_node *nodes;
@@ -115,12 +87,56 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     return head;
 }
 
+#define SORTERS_LEN 16
+
+//given an initially unsorted list of qnodes, sort them and merge duplicates
+static inline short sort_and_compress(Qdigest *q, short head) {
+    Qdigest_node *nodes;
+    short unsorted_head, next;
+    short sorters[SORTERS_LEN];  
+    // sorters[n] is the pointer to a sorted list of length 2 ** n, or -1
+    int cur_sorter;
+    for(cur_sorter=0; cur_sorter < SORTERS_LEN; cur_sorter++) { sorters[cur_sorter] = -1; }
+    nodes = q->nodes;
+    unsorted_head = head;
+    while(unsorted_head != -1) { // combine same length lists until unsorted input exhausted
+        if(sorters[0] == -1) {
+            sorters[0] = unsorted_head;
+            unsorted_head = nodes[unsorted_head].next;
+            nodes[sorters[0]].next = -1;
+        }
+        if(unsorted_head == -1) { break; }
+        next = unsorted_head;
+        unsorted_head = nodes[unsorted_head].next;
+        nodes[next].next = -1;
+        for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter] != -1; cur_sorter++) {
+            next = merge_qnode_lists(q, next, sorters[cur_sorter]);
+        }
+        assert(cur_sorter < SORTERS_LEN);
+        sorters[cur_sorter] = next;
+    }
+    // combine differently lengthed lists till there is only one
+    // find the first valid linked list in sorters
+    for(cur_sorter = 0; cur_sorter < SORTERS_LEN; cur_sorter++) {
+        if(sorters[cur_sorter] != -1) {
+            next = sorters[cur_sorter];
+            break;
+        }
+    }
+    // roll up all the elements in sorters
+    for(; cur_sorter < SORTERS_LEN; cur_sorter++) {
+        if(sorters[cur_sorter] == -1) { continue; }
+        next = merge_qnode_lists(q, sorters[cur_sorter], next);
+    }
+    return next;
+}
+
+
 static inline void compress_generation(Qdigest *q, short cur_nodes, short parents, char generation) {
     unsigned int mask;
     short cur, parents_cur, sibling, parent, parents_prev, prev, next;
     unsigned long long count;
     unsigned long long min_count;
-    int target; // number to be freed
     Qdigest_node *nodes;
 
     nodes = q->nodes;
@@ -139,7 +155,7 @@ static inline void compress_generation(Qdigest *q, short cur_nodes, short parent
             sibling = 0;
         }
         // walk parents to the last one that could possibly be cur parent
-        while(parents_cur && (nodes[cur].min & mask) > nodes[parents_cur].min) {
+        while(parents_cur && (int)(nodes[cur].min & mask) > nodes[parents_cur].min) {
             parents_prev = parents_cur;
             parents_cur = nodes[parents_cur].next;
         }
