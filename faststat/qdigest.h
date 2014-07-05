@@ -18,7 +18,7 @@ typedef struct {
 } Qdigest_node;
 
 
-typedef struct {
+typedef struct Qdigest {
     unsigned long long n;
     short k;
     short free_head;
