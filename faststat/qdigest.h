@@ -1,33 +1,60 @@
 /*
-Several percentile algorithms
+An implementation of the QDigest algorithm for floating point numbers.
 
-
+(The internal data structure is kept in terms of the bits of the floating point.)
 */
 
 #ifdef _WIN32
 #define inline __inline
 #endif
 
+#include <Python.h>
+
 typedef struct {
     short next;
     short padddd;
-    int min;
+    unsigned int min;
     unsigned long long count;
 } Qdigest_node;
 
 
 typedef struct {
     unsigned long long n;
-    int k;
-    char log2_k;
+    short k;
     short free_head;
     short free_tail;
     short num_free;
     short new_head;
     short new_tail;
     short generations[32];
-    Qdigest_node *nodes;
+    Qdigest_node *nodes; // TODO: flexible array?  (does MSVC support this feature?)
 } Qdigest;
+
+
+Qdigest* qdigest_new(short size) {
+    Qdigest *q;
+    Qdigest_node *nodes;
+    int i;
+    // allocate memory
+    q = PyMem_Malloc(sizeof(Qdigest));
+    nodes = PyMem_Malloc(sizeof(Qdigest_node) * size);
+    q->k = size / 4;
+    q->n = 0;
+    q->nodes = nodes;
+    // all nodes are free to start with
+    q->free_head = 0;
+    q->free_tail = size - 1;
+    for(i=0; i < size - 1; i++) {
+        nodes[i].next = i + 1;
+    }
+    nodes[size - 1].next = -1;
+    q->num_free = size;
+    // all generations are empty
+    for(i=0; i < 32; i++) {
+        q->generations[i] = -1;
+    }
+    return q;
+}
 
 
 static inline short qdigest_alloc(Qdigest *q) {
@@ -87,6 +114,43 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     return head;
 }
 
+
+static inline void de_duplicate_sorted_list(Qdigest *q, short head) {
+    Qdigest_node *nodes;
+    short unique_head, scan_head, leftover_head, freed;
+
+    nodes = q->nodes;
+    unique_head = head;
+    scan_head = nodes[unique_head].next;
+    // walk down the list looking for the first pair of identical nodes
+    // (this is broken out from the second phase since it is much simpler)
+    while(scan_head != -1 && nodes[unique_head].min != nodes[scan_head].min) {
+        unique_head = scan_head;
+        scan_head = nodes[scan_head].next;
+    }
+    // now, begin compacting
+    while(scan_head != -1) {
+        while(nodes[unique_head].min == nodes[scan_head].min) {
+            nodes[unique_head].count += nodes[scan_head].count;
+            scan_head = nodes[scan_head].next;
+        }
+        unique_head = nodes[unique_head].next;
+        nodes[unique_head].min = nodes[scan_head].min;
+        nodes[unique_head].count = nodes[scan_head].count;
+    }
+    // finally free any left over nodes that were removed by de-duplication
+    if(nodes[unique_head].next != -1) {
+        leftover_head = nodes[unique_head].next;
+        nodes[unique_head].next = -1;
+        while(leftover_head != -1) {
+            freed = leftover_head;
+            leftover_head = nodes[leftover_head].next;
+            qdigest_free(q, freed);
+        }
+    }
+}
+
+
 #define SORTERS_LEN 16
 
 //given an initially unsorted list of qnodes, sort them and merge duplicates
@@ -128,6 +192,8 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         if(sorters[cur_sorter] == -1) { continue; }
         next = merge_qnode_lists(q, sorters[cur_sorter], next);
     }
+    // de-duplicate nodes
+    de_duplicate_sorted_list(q, next);
     return next;
 }
 
@@ -222,10 +288,11 @@ static inline void compress(Qdigest *q) {
 
 // this is probably very bad
 static union converter {
-    int intval;
+    unsigned int intval;
     float floatval;
     char bytesval[4];
 };
+
 
 void qdigest_update(Qdigest *q, float x) {
     short new_node;
@@ -242,4 +309,61 @@ void qdigest_update(Qdigest *q, float x) {
     } else {
         q->new_head = q->new_tail = new_node;
     }
+}
+
+
+// float must be numeric (not NaN, +inf, or -inf)
+// in terms of bits, (X = 1 or 0, doesn't matter)
+//  NaN = X-11111111-XXXXXXXXXXXXXXXXXXXXXXX
+// +inf = 0-11111111-00000000000000000000000
+// -inf = 1-11111111-00000000000000000000000
+// this can be reduced to the rule that there are two non-numerical ranges
+// 7F80 0000 to 7FFF FFFF, and FF80 0000 to FFFF FFFF
+// put another way, 0000 0000 to 7F7F FFFF and 8000 0000 to FF7F FFFF are the valid ranges
+float int_bits2numeric_float(int val) {
+    union converter convert;
+    if(val & 0x80000000) {
+        val = min(val, 0xFF7FFFFF);
+    } else {
+        val = min(val, 0x7F7FFFFF);
+    }
+    convert.intval = val;
+    return convert.floatval;
+}
+
+// NOT a Python function -- a C helper to dump the internal state of the qdigest into python tuples
+PyObject* qdigest_dumpstate(Qdigest *q) {
+    int i, j;
+    short head, gen_size, walker;
+    Qdigest_node *nodes;
+    PyObject *generations, *in_buff, *ret, *cur_gen, *cur_node;
+    nodes = q->nodes;
+    generations = PyTuple_New(32);
+    for(i=0; i < 32; i++) {
+        head = q->generations[i];
+        if(head == -1) {
+            Py_INCREF(Py_None);
+            PyTuple_SetItem(generations, (Py_ssize_t)i, Py_None);
+            continue;
+        }
+        // walk once to determine size of this generation
+        gen_size = 1;
+        for(walker = head; walker != -1; walker = nodes[walker].next) {
+            gen_size++;
+        }
+        // walk again to put the values into the tuple
+        cur_gen = PyTuple_New(gen_size);
+        for(j=0; j<gen_size; j++) {
+            cur_node = PyTuple_Pack(3,
+                PyFloat_FromDouble(int_bits2numeric_float(nodes[head].min)), 
+                PyFloat_FromDouble(int_bits2numeric_float(nodes[head].min + (1 << i) - 1)),
+                PyLong_FromUnsigedLongLong(nodes[head].count));
+            PyTuple_SetItem(cur_gen, (Py_ssize_t)j, cur_node);
+        }
+        PyTuple_SetItem(generations, (Py_ssize_t)i, cur_gen);
+    }
+    // walk once to determine current size of input buffer
+    // head =   ///// TODO 
+    ret = PyTuple_Pack(2, in_buff, generations);
+    return ret;
 }

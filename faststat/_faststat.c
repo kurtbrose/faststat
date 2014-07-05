@@ -113,34 +113,29 @@ typedef struct faststat_Stats_struct {
     //make handling code cleaner/smaller
     faststat_WindowCount *window_counts;
     struct faststat_Stats_struct *interval;
+    struct Qdigest *q_digest;  // percentile/histogram data structure 
 } faststat_Stats;
 
 
-char* NEW_ARGS[] = {"buckets", "lastN", "percentiles", "interval", "expo_avgs", 
+char* NEW_ARGS[] = {"lastN", "digest_size", "interval", "expo_avgs", 
     "window_counts", "num_top", NULL};
 
 
 static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     faststat_Stats *self;
-    PyObject *buckets, *percentiles, *interval, *expo_avgs, *window_counts, *cur;
-    int num_prev, num_buckets, num_percentiles, num_expo_avgs, num_window_counts, num_top;
+    PyObject *interval, *expo_avgs, *window_counts, *cur;
+    int num_prev, digest_size, num_expo_avgs, num_window_counts, num_top;
     int i, total, offset;
-    double temp;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiOOOOi", NEW_ARGS, 
-            &buckets, &num_prev, &percentiles, &interval, &expo_avgs, &window_counts, &num_top)) {
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiiOOOi", NEW_ARGS, 
+            &num_prev, &digest_size, &interval, &expo_avgs, &window_counts, &num_top)) {
         return NULL;
     }
-
-    buckets = PySequence_Fast(buckets, "expected a sequence");
-    percentiles = PySequence_Fast(percentiles, "expected a sequence");
     expo_avgs = PySequence_Fast(expo_avgs, "expected a sequence");
     window_counts = PySequence_Fast(window_counts, "expected a sequence");
-    if(!buckets || !percentiles || !expo_avgs || !window_counts) { 
+    if(!expo_avgs || !window_counts) { 
         // TODO: decref on buckets and percentiles
         return NULL;
     }
-    num_buckets = (int)PySequence_Fast_GET_SIZE(buckets);
-    num_percentiles = (int)PySequence_Fast_GET_SIZE(percentiles);
     num_expo_avgs = (int)PySequence_Fast_GET_SIZE(expo_avgs);
     num_window_counts = (int)PySequence_Fast_GET_SIZE(window_counts);
 
@@ -151,7 +146,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
         self->mean = self->m2 = self->m3 = self->m4 = self->min = self->max = 0;
         self->sum_of_logs = self->sum_of_inv = 0;
         self->mintime = self->maxtime = self->lasttime = 0;
-        self->num_percentiles = num_percentiles;
+        self->q_digest = qdigest_new(digest_size);
         if(interval != Py_None ) {
             self->interval = (faststat_Stats*)interval; // WARNING: incompatible pointer type..
         } else {                 // TODO: figure out a better test of type here
@@ -406,7 +401,7 @@ static void _add(faststat_Stats *self, double x, unsigned long long t) {
     self->sum_of_logs += x > 0 ? log(x) : NAN;
     self->sum_of_inv += x > 0 ? 1 / x : NAN;
     _update_moments(self, x);
-    _update_percentiles(self, x);
+    qdigest_update(self->q_digest, (float)x);
     _update_expo_avgs(self, x);
     _update_lastN(self, x);
     _update_window_counts(self, t);
@@ -470,30 +465,6 @@ static PyObject* faststat_Stats_tick(faststat_Stats *self, PyObject *args) {
     if(PyErr_Occurred()) { return NULL; }
     Py_INCREF(Py_None);
     return Py_None;
-}
-
-
-static PyObject* faststat_Stats_get_buckets(faststat_Stats* self, PyObject *args) {
-    PyObject *b_dict;
-    faststat_Bucket *cur;
-    unsigned int i;
-    unsigned long long leftover;
-    leftover = self->n;
-    b_dict = PyDict_New();
-    for(i = 0; i < self->num_buckets; i++) {
-        cur = &(self->buckets[i]);
-        leftover -= cur->count;
-        PyDict_SetItem(
-            b_dict,
-            PyFloat_FromDouble(cur->max),
-            PyLong_FromUnsignedLongLong(cur->count));
-    }
-    PyDict_SetItem(b_dict, Py_None, PyLong_FromUnsignedLongLong(leftover));
-    if(PyErr_Occurred()) { 
-        Py_DECREF(b_dict);
-        return NULL; 
-    }
-    return b_dict;
 }
 
 
@@ -595,10 +566,6 @@ static PyMethodDef faststat_Stats_methods[] = {
         "add a duration data point, whose start time is passed"},
     {"tick", (PyCFunction)faststat_Stats_tick, METH_NOARGS, 
         "add an interval data point between now and the last tick"},
-    {"get_percentiles", (PyCFunction)faststat_Stats_get_percentiles, METH_NOARGS, 
-        "construct percentiles dictionary"},
-    {"get_buckets", (PyCFunction)faststat_Stats_get_buckets, METH_NOARGS,
-        "construct buckets dictionary"},
     {"get_expo_avgs", (PyCFunction)faststat_Stats_get_expoavgs, METH_NOARGS,
         "get a dictionary of decay rates to previous averages"},
     {"get_prev", (PyCFunction)faststat_Stats_get_prev, METH_VARARGS,
