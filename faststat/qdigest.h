@@ -331,7 +331,7 @@ static inline float int_bits2numeric_float(unsigned int val) {
     return convert.floatval;
 }
 
-static inline PyObject* _pack_list(Qdigest_nodes *nodes, short head, int generation) {
+static inline PyObject* _pack_list(Qdigest_node *nodes, short head, int generation) {
     PyObject* ret;
     int size, i;
     short walker;
@@ -346,12 +346,13 @@ static inline PyObject* _pack_list(Qdigest_nodes *nodes, short head, int generat
         // walk again to put the values into the tuple
         ret = PyTuple_New(size);
         walker = head;
-        for(j=0; j<gen_size; j++) {
-            cur_node = PyTuple_Pack(3,
-                PyFloat_FromDouble(int_bits2numeric_float(nodes[walker].min)), 
-                PyFloat_FromDouble(int_bits2numeric_float(nodes[walker].min + (1 << generation) - 1)),
-                PyLong_FromUnsigedLongLong(nodes[walker].count));
-            PyTuple_SetItem(cur_gen, (Py_ssize_t)j, cur_node);
+        for(i=0; i<size; i++) {
+            PyTuple_SetItem(ret, (Py_ssize_t)i, 
+                PyTuple_Pack(3,
+                    PyFloat_FromDouble(int_bits2numeric_float(nodes[walker].min)), 
+                    PyFloat_FromDouble(int_bits2numeric_float(nodes[walker].min + (1 << generation) - 1)),
+                    PyLong_FromUnsignedLongLong(nodes[walker].count))
+            );
             walker = nodes[walker].next;
         }        
     }
@@ -362,7 +363,7 @@ static inline PyObject* _pack_list(Qdigest_nodes *nodes, short head, int generat
 PyObject* qdigest_dumpstate(Qdigest *q) {
     int i;
     Qdigest_node *nodes;
-    PyObject *generations, *in_buff, *ret, *cur_gen, *cur_node;
+    PyObject *generations, *in_buff, *ret;
     nodes = q->nodes;
     generations = PyTuple_New(32);
     for(i=0; i < 32; i++) {
