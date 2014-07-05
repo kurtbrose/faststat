@@ -320,50 +320,55 @@ void qdigest_update(Qdigest *q, float x) {
 // this can be reduced to the rule that there are two non-numerical ranges
 // 7F80 0000 to 7FFF FFFF, and FF80 0000 to FFFF FFFF
 // put another way, 0000 0000 to 7F7F FFFF and 8000 0000 to FF7F FFFF are the valid ranges
-float int_bits2numeric_float(int val) {
+static inline float int_bits2numeric_float(unsigned int val) {
     union converter convert;
-    if(val & 0x80000000) {
-        val = min(val, 0xFF7FFFFF);
-    } else {
-        val = min(val, 0x7F7FFFFF);
+    if((val & 0x80000000) && val > 0xFF7FFFFF) {
+        val = 0xFF7FFFFF;
+    } else if(val > 0x7F7FFFFF) {
+        val = 0x7F7FFFFF;
     }
     convert.intval = val;
     return convert.floatval;
 }
 
+static inline PyObject* _pack_list(Qdigest_nodes *nodes, short head, int generation) {
+    PyObject* ret;
+    int size, i;
+    short walker;
+    if(head == -1) {
+        ret = PyTuple_New(0);
+    } else {
+        // walk once to determine size
+        size = 1;
+        for(walker = head; walker != -1; walker = nodes[walker].next) {
+            size++;
+        }
+        // walk again to put the values into the tuple
+        ret = PyTuple_New(size);
+        walker = head;
+        for(j=0; j<gen_size; j++) {
+            cur_node = PyTuple_Pack(3,
+                PyFloat_FromDouble(int_bits2numeric_float(nodes[walker].min)), 
+                PyFloat_FromDouble(int_bits2numeric_float(nodes[walker].min + (1 << generation) - 1)),
+                PyLong_FromUnsigedLongLong(nodes[walker].count));
+            PyTuple_SetItem(cur_gen, (Py_ssize_t)j, cur_node);
+            walker = nodes[walker].next;
+        }        
+    }
+    return ret;
+}
+
 // NOT a Python function -- a C helper to dump the internal state of the qdigest into python tuples
 PyObject* qdigest_dumpstate(Qdigest *q) {
-    int i, j;
-    short head, gen_size, walker;
+    int i;
     Qdigest_node *nodes;
     PyObject *generations, *in_buff, *ret, *cur_gen, *cur_node;
     nodes = q->nodes;
     generations = PyTuple_New(32);
     for(i=0; i < 32; i++) {
-        head = q->generations[i];
-        if(head == -1) {
-            Py_INCREF(Py_None);
-            PyTuple_SetItem(generations, (Py_ssize_t)i, Py_None);
-            continue;
-        }
-        // walk once to determine size of this generation
-        gen_size = 1;
-        for(walker = head; walker != -1; walker = nodes[walker].next) {
-            gen_size++;
-        }
-        // walk again to put the values into the tuple
-        cur_gen = PyTuple_New(gen_size);
-        for(j=0; j<gen_size; j++) {
-            cur_node = PyTuple_Pack(3,
-                PyFloat_FromDouble(int_bits2numeric_float(nodes[head].min)), 
-                PyFloat_FromDouble(int_bits2numeric_float(nodes[head].min + (1 << i) - 1)),
-                PyLong_FromUnsigedLongLong(nodes[head].count));
-            PyTuple_SetItem(cur_gen, (Py_ssize_t)j, cur_node);
-        }
-        PyTuple_SetItem(generations, (Py_ssize_t)i, cur_gen);
+        PyTuple_SetItem(generations, (Py_ssize_t)i, _pack_list(nodes, q->generations[i], i));
     }
-    // walk once to determine current size of input buffer
-    // head =   ///// TODO 
+    in_buff = _pack_list(nodes, q->new_head, 0);
     ret = PyTuple_Pack(2, in_buff, generations);
     return ret;
 }
