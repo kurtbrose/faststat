@@ -61,9 +61,8 @@ WINDOW_COUNTS = [(64, ONE_MIN_NS), (32, ONE_HOUR_NS)]
 
 class _BaseStats(object):
     'base class to avoid repeating code'
-    def __init__(self, buckets, lastN, percentiles, interval, expo_avgs,
+    def __init__(self, lastN, digest_size, interval, expo_avgs,
             window_counts, num_top):
-        buckets = buckets + (float("inf"),)
         lastN = int(2**math.ceil(math.log(lastN)/math.log(2)))
         num_top = int(2**math.ceil(math.log(lastN)/math.log(2)))
         if interval:
@@ -71,7 +70,7 @@ class _BaseStats(object):
             interval = self.interval._stats
         else:
             interval = None
-        self._stats = _faststat.Stats(buckets, lastN, percentiles, interval,
+        self._stats = _faststat.Stats(lastN, digest_size, interval,
             expo_avgs, window_counts, num_top)
 
     @property
@@ -153,9 +152,8 @@ class Stats(_BaseStats):
     '''
     Call add(value) to add a data point.
     '''
-    def __init__(self, buckets=DEFAULT_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES,
-            interval=True):
-        super(Stats, self).__init__(buckets, lastN, percentiles, interval, EXPO_AVGS,
+    def __init__(self, lastN=64, digest_size=4096, interval=True):
+        super(Stats, self).__init__(lastN, digest_size, interval, EXPO_AVGS,
             WINDOW_COUNTS, num_top=64)
         self.add = self._stats.add
 
@@ -169,9 +167,8 @@ class Interval(_BaseStats):
     Call tick() to register occurrences.
     Note that calling tick() N times results in N-1 data points.
     '''
-    def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES,
-            window_counts=WINDOW_COUNTS):
-        super(Interval, self).__init__(buckets, lastN, percentiles, False, (), (), num_top=64)
+    def __init__(self, lastN=64, digest_size=4096, window_counts=WINDOW_COUNTS):
+        super(Interval, self).__init__(lastN, digest_size, False, (), (), num_top=64)
         self.tick = self._stats.tick
 
     def __getattr__(self, name):
@@ -184,9 +181,8 @@ class Duration(_BaseStats):
     Represents statistics for a duration.
     Call end(start_time_nanos) to add a data point.
     '''
-    def __init__(self, buckets=TIME_BUCKETS, lastN=64, percentiles=DEFAULT_PERCENTILES,
-            interval=True):
-        super(Duration, self).__init__(buckets, lastN, percentiles, interval, EXPO_AVGS,
+    def __init__(self, lastN=64, digest_size=4096, interval=True):
+        super(Duration, self).__init__(lastN, digest_size, interval, EXPO_AVGS,
             WINDOW_COUNTS, num_top=64)
         self.end = self._stats.end
 

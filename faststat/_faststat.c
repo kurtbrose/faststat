@@ -126,7 +126,7 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
     PyObject *interval, *expo_avgs, *window_counts, *cur;
     int num_prev, digest_size, num_expo_avgs, num_window_counts, num_top;
     int i, total, offset;
-    if(!PyArg_ParseTupleAndKeywords(args, kwds, "OiiOOOi", NEW_ARGS, 
+    if(!PyArg_ParseTupleAndKeywords(args, kwds, "iiOOOi", NEW_ARGS, 
             &num_prev, &digest_size, &interval, &expo_avgs, &window_counts, &num_top)) {
         return NULL;
     }
