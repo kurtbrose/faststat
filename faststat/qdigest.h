@@ -163,6 +163,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
     for(cur_sorter=0; cur_sorter < SORTERS_LEN; cur_sorter++) { sorters[cur_sorter] = -1; }
     nodes = q->nodes;
     unsorted_head = head;
+    next = unsored_head;  // just incase unsorted_head is -1, so next is initialized
     while(unsorted_head != -1) { // combine same length lists until unsorted input exhausted
         if(sorters[0] == -1) {
             sorters[0] = unsorted_head;
@@ -198,7 +199,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
 }
 
 
-static inline void compress_generation(Qdigest *q, short cur_nodes, short parents, char generation) {
+static inline void compress_generation(Qdigest *q, short cur_nodes, short parents, short generation) {
     unsigned int mask;
     short cur, parents_cur, sibling, parent, parents_prev, prev, next;
     unsigned long long count;
@@ -274,7 +275,7 @@ static inline void compress_generation(Qdigest *q, short cur_nodes, short parent
 }
 
 static inline void compress(Qdigest *q) {
-    char i;
+    short i;  // don't use char to avoid compiler warnings, even tho max is 32
     short new_nodes;
     new_nodes = sort_and_compress(q, q->new_head);
     q->new_head = q->new_tail = 0;
@@ -290,7 +291,6 @@ static inline void compress(Qdigest *q) {
 static union converter {
     unsigned int intval;
     float floatval;
-    char bytesval[4];
 };
 
 
