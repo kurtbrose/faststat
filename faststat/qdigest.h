@@ -163,7 +163,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
     for(cur_sorter=0; cur_sorter < SORTERS_LEN; cur_sorter++) { sorters[cur_sorter] = -1; }
     nodes = q->nodes;
     unsorted_head = head;
-    next = unsored_head;  // just incase unsorted_head is -1, so next is initialized
+    next = unsorted_head;  // just incase unsorted_head is -1, so next is initialized
     while(unsorted_head != -1) { // combine same length lists until unsorted input exhausted
         if(sorters[0] == -1) {
             sorters[0] = unsorted_head;
