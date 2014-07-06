@@ -288,7 +288,7 @@ static inline void compress(Qdigest *q) {
 }
 
 // this is probably very bad
-static union converter {
+union converter {
     unsigned int intval;
     float floatval;
 };
