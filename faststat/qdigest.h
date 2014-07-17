@@ -41,17 +41,18 @@ Qdigest* qdigest_new(short size) {
     q->k = size / 4;
     q->n = 0;
     q->nodes = nodes;
+    q->nodes -= 1; // index 1 based instead of 0 based to allow for quick null testing
     // all nodes are free to start with
     q->free_head = 0;
     q->free_tail = size - 1;
     for(i=0; i < size - 1; i++) {
         nodes[i].next = i + 1;
     }
-    nodes[size - 1].next = -1;
+    nodes[size - 1].next = 0;
     q->num_free = size;
     // all generations are empty
     for(i=0; i < 32; i++) {
-        q->generations[i] = -1;
+        q->generations[i] = 0;
     }
     return q;
 }
@@ -174,6 +175,12 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         next = unsorted_head;
         unsorted_head = nodes[unsorted_head].next;
         nodes[next].next = -1;
+        // the nth element of sorters will be a list of length 2^n
+        // (sorter[0] length 1, sorter[1] length 2, sorter[2] length 4...)
+        // lists always merge with lists of the same length, therefore inductively
+        // if a list just merged it has doubled in size and is ready to occupy
+        // the next position in sorters, or merge with the list in that position
+        // if one already exists
         for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter] != -1; cur_sorter++) {
             next = merge_qnode_lists(q, next, sorters[cur_sorter]);
         }
