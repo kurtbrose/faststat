@@ -43,12 +43,12 @@ Qdigest* qdigest_new(short size) {
     q->nodes = nodes;
     q->nodes -= 1; // index 1 based instead of 0 based to allow for quick null testing
     // all nodes are free to start with
-    q->free_head = 0;
-    q->free_tail = size - 1;
-    for(i=0; i < size - 1; i++) {
+    q->free_head = 1;
+    q->free_tail = size;
+    for(i=1; i < size; i++) {
         nodes[i].next = i + 1;
     }
-    nodes[size - 1].next = 0;
+    nodes[size].next = 0;
     q->num_free = size;
     // all generations are empty
     for(i=0; i < 32; i++) {
@@ -110,8 +110,8 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
         tail = nodes[tail].next;
     }
     //append any leftover nodes to the end of the list
-    //if there aren't any leftover nodes, set tail.next to -1
-    nodes[tail].next = b == -1 ? a : b;
+    //if there aren't any leftover nodes, set tail.next to 0
+    nodes[tail].next = b == 0 ? a : b;
     return head;
 }
 
@@ -125,12 +125,12 @@ static inline void de_duplicate_sorted_list(Qdigest *q, short head) {
     scan_head = nodes[unique_head].next;
     // walk down the list looking for the first pair of identical nodes
     // (this is broken out from the second phase since it is much simpler)
-    while(scan_head != -1 && nodes[unique_head].min != nodes[scan_head].min) {
+    while(scan_head && nodes[unique_head].min != nodes[scan_head].min) {
         unique_head = scan_head;
         scan_head = nodes[scan_head].next;
     }
     // now, begin compacting
-    while(scan_head != -1) {
+    while(scan_head) {
         while(nodes[unique_head].min == nodes[scan_head].min) {
             nodes[unique_head].count += nodes[scan_head].count;
             scan_head = nodes[scan_head].next;
@@ -140,10 +140,10 @@ static inline void de_duplicate_sorted_list(Qdigest *q, short head) {
         nodes[unique_head].count = nodes[scan_head].count;
     }
     // finally free any left over nodes that were removed by de-duplication
-    if(nodes[unique_head].next != -1) {
+    if(nodes[unique_head].next) {
         leftover_head = nodes[unique_head].next;
-        nodes[unique_head].next = -1;
-        while(leftover_head != -1) {
+        nodes[unique_head].next = 0;
+        while(leftover_head) {
             freed = leftover_head;
             leftover_head = nodes[leftover_head].next;
             qdigest_free(q, freed);
@@ -159,29 +159,29 @@ static inline short sort_and_compress(Qdigest *q, short head) {
     Qdigest_node *nodes;
     short unsorted_head, next;
     short sorters[SORTERS_LEN];  
-    // sorters[n] is the pointer to a sorted list of length 2 ** n, or -1
+    // sorters[n] is the pointer to a sorted list of length 2 ** n, or 0
     int cur_sorter;
-    for(cur_sorter=0; cur_sorter < SORTERS_LEN; cur_sorter++) { sorters[cur_sorter] = -1; }
+    for(cur_sorter=0; cur_sorter < SORTERS_LEN; cur_sorter++) { sorters[cur_sorter] = 0; }
     nodes = q->nodes;
     unsorted_head = head;
-    next = unsorted_head;  // just incase unsorted_head is -1, so next is initialized
-    while(unsorted_head != -1) { // combine same length lists until unsorted input exhausted
-        if(sorters[0] == -1) {
+    next = unsorted_head;  // just incase unsorted_head is 0, so next is initialized
+    while(unsorted_head) { // combine same length lists until unsorted input exhausted
+        if(sorters[0] == 0) {
             sorters[0] = unsorted_head;
             unsorted_head = nodes[unsorted_head].next;
-            nodes[sorters[0]].next = -1;
+            nodes[sorters[0]].next = 0;
         }
-        if(unsorted_head == -1) { break; }
+        if(unsorted_head == 0) { break; }
         next = unsorted_head;
         unsorted_head = nodes[unsorted_head].next;
-        nodes[next].next = -1;
+        nodes[next].next = 0;
         // the nth element of sorters will be a list of length 2^n
         // (sorter[0] length 1, sorter[1] length 2, sorter[2] length 4...)
         // lists always merge with lists of the same length, therefore inductively
         // if a list just merged it has doubled in size and is ready to occupy
         // the next position in sorters, or merge with the list in that position
         // if one already exists
-        for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter] != -1; cur_sorter++) {
+        for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter]; cur_sorter++) {
             next = merge_qnode_lists(q, next, sorters[cur_sorter]);
         }
         assert(cur_sorter < SORTERS_LEN);
@@ -190,14 +190,14 @@ static inline short sort_and_compress(Qdigest *q, short head) {
     // combine differently lengthed lists till there is only one
     // find the first valid linked list in sorters
     for(cur_sorter = 0; cur_sorter < SORTERS_LEN; cur_sorter++) {
-        if(sorters[cur_sorter] != -1) {
+        if(sorters[cur_sorter]) {
             next = sorters[cur_sorter];
             break;
         }
     }
     // roll up all the elements in sorters
     for(; cur_sorter < SORTERS_LEN; cur_sorter++) {
-        if(sorters[cur_sorter] == -1) { continue; }
+        if(sorters[cur_sorter] == 0) { continue; }
         next = merge_qnode_lists(q, sorters[cur_sorter], next);
     }
     // de-duplicate nodes
@@ -342,12 +342,12 @@ static inline PyObject* _pack_list(Qdigest_node *nodes, short head, int generati
     PyObject* ret;
     int size, i;
     short walker;
-    if(head == -1) {
+    if(head == 0) {
         ret = PyTuple_New(0);
     } else {
         // walk once to determine size
         size = 1;
-        for(walker = head; walker != -1; walker = nodes[walker].next) {
+        for(walker = head; walker; walker = nodes[walker].next) {
             size++;
         }
         // walk again to put the values into the tuple
