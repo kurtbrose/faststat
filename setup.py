@@ -1,8 +1,15 @@
 import platform
 from distutils.core import setup, Extension
 
+extra_compile_args = []
+if platform.system() == 'Windows':
+    extra_compile_args = ['/MT',]
+libraries = []
+if platform.system() not in ('Windows', 'Darwin'):
+    libraries = ['rt',]
+
 _faststat = Extension('_faststat', sources=['faststat/_faststat.c'], 
-                      libraries=[] if platform.system() in ['Windows', 'Darwin'] else ['rt',])
+                      libraries=libraries, extra_compile_args=extra_compile_args)
 
 setup(
     name='faststat',
