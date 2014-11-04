@@ -19,15 +19,15 @@ typedef struct {
 
 
 typedef struct Qdigest {
-    unsigned long long n;
-    short k;
-    short free_head;
+    unsigned long long n; // count of points added
+    short k; // scaling factor
+    short free_head; // free_ and the ends of the linked list of free nodes
     short free_tail;
-    short num_free;
-    short new_head;
-    short new_tail;
-    short generations[32];
-    Qdigest_node *nodes; // TODO: flexible array?  (does MSVC support this feature?)
+    short num_free; // size of free list
+    short new_head; // new_ are the ends of the list of points being added
+    short new_tail; // before they have been sorted and compressed
+    short generations[32]; // these are points in the sorted and compressed QDigest
+    Qdigest_node *nodes; // raw node store
 } Qdigest;
 
 
@@ -46,14 +46,16 @@ Qdigest* qdigest_new(short size) {
     q->free_head = 1;
     q->free_tail = size;
     for(i=1; i < size; i++) {
-        nodes[i].next = i + 1;
+        q->nodes[i].next = i + 1;
     }
-    nodes[size].next = 0;
+    q->nodes[size].next = 0;
     q->num_free = size;
     // all generations are empty
     for(i=0; i < 32; i++) {
         q->generations[i] = 0;
     }
+    // no data points added yet, new list is empty
+    q->new_head = q->new_tail = 0;
     return q;
 }
 
@@ -76,6 +78,7 @@ static inline void qdigest_free(Qdigest *q, short index) {
 static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     Qdigest_node *nodes;
     short head, tail, freed;
+    assert(a != b);
     nodes = q->nodes;
     if(nodes[a].min < nodes[b].min) { // a is smaller, it should be head
         head = a;
@@ -93,6 +96,7 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
         }
     tail = head;
     while(a && b) {
+        assert(a != b);
         if(nodes[a].min < nodes[b].min) {
             nodes[tail].next = a;
             a = nodes[a].next;

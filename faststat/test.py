@@ -59,6 +59,7 @@ def test():
     for d in data:
         stats.add(d)
     print time.time() - start, "microseconds per point"
+    '''
     print "mean (should be 1)", stats.mean
     print "kurtosis / reference kurtosis", stats.kurtosis, online_kurtosis(data)
     print "variance / reference variance", stats.variance, online_variance(data)
@@ -72,6 +73,9 @@ def test():
     print "window_counts", stats.get_window_counts()
     print "top 10", sorted(stats.get_topN())[-10:]
     return stats
+    '''
+    import pprint
+    pprint.pprint(stats.get_qdigest_state())
 
 
 if __name__ == "__main__":

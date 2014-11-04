@@ -222,7 +222,7 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
         PyMem_Del(self->expo_avgs);
     }
     if(self->lastN) {
-        PyMem_Del(self->lastN);
+        //PyMem_Del(self->lastN);
     }
     if(self->window_counts) {
         // see constructor; all window_counts are allocated as one chunk
@@ -560,6 +560,11 @@ static PyObject* faststat_Stats_get_window_counts(faststat_Stats *self, PyObject
 }
 
 
+static PyObject* faststat_Stats_get_qdigest_state(faststat_Stats *self, PyObject *args) {
+    return qdigest_dumpstate(self->q_digest);
+}
+
+
 static PyMethodDef faststat_Stats_methods[] = {
     {"add", (PyCFunction)faststat_Stats_add, METH_VARARGS, "add a data point"},
     {"end", (PyCFunction)faststat_Stats_end, METH_VARARGS, 
@@ -574,6 +579,8 @@ static PyMethodDef faststat_Stats_methods[] = {
         "get the highest values"},
     {"get_window_counts", (PyCFunction)faststat_Stats_get_window_counts, METH_NOARGS,
         "get a dictionary of window intervals to window counts"},
+    {"get_qdigest_state", (PyCFunction)faststat_Stats_get_qdigest_state, METH_NOARGS,
+        "dump the internal state of the qdigest, suitable for queries"},
     {NULL}
 };
 
