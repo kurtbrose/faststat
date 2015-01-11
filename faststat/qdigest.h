@@ -78,6 +78,9 @@ static inline void qdigest_free(Qdigest *q, short index) {
 static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     Qdigest_node *nodes;
     short head, tail, freed;
+    short param_a, param_b;
+    param_a = a;
+    param_b = b;
     assert(a != b);
     nodes = q->nodes;
     if(nodes[a].min < nodes[b].min) { // a is smaller, it should be head
@@ -94,16 +97,20 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
             b = nodes[b].next;
             qdigest_free(q, freed);
         }
+    assert(a != b);
     tail = head;
     while(a && b) {
         assert(a != b);
         if(nodes[a].min < nodes[b].min) {
+            assert(nodes[a].next != b);
             nodes[tail].next = a;
             a = nodes[a].next;
         } else if(nodes[a].min > nodes[b].min) {
+            assert(nodes[b].next != a);
             nodes[tail].next = b;
             b = nodes[b].next;
         } else {
+            assert(nodes[a].next != nodes[b].next);
             nodes[tail].next = a;
             nodes[a].count += nodes[b].count;
             a = nodes[a].next;
@@ -186,7 +193,9 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         // the next position in sorters, or merge with the list in that position
         // if one already exists
         for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter]; cur_sorter++) {
+            assert(next != sorters[cur_sorter]);
             next = merge_qnode_lists(q, next, sorters[cur_sorter]);
+            sorters[cur_sorter] = 0;  // nodes of sorters[cur_sorter] now belong to next
         }
         assert(cur_sorter < SORTERS_LEN);
         sorters[cur_sorter] = next;
