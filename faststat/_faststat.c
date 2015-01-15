@@ -274,6 +274,9 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
     if(self->lastN) {
         PyMem_Del(self->lastN);
     }
+    if(self->topN) {
+        PyMem_Del(self->topN + 1));  // undo 1-based indexing
+    }
     if(self->window_counts) {
         // see constructor; all window_counts are allocated as one chunk
         PyMem_Del(self->window_counts[0].counts);
