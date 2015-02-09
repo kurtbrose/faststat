@@ -74,11 +74,49 @@ static inline void qdigest_free(Qdigest *q, short index) {
     q->num_free++;
 }
 
+
+unsigned char A_LIST[64 * 1024];
+unsigned char B_LIST[64 * 1024];
+
+static int find_errors(Qdigest *q, short a, short b) {
+    short cur_a, cur_b;
+    memset(A_LIST, 0, sizeof(A_LIST));
+    memset(B_LIST, 0, sizeof(B_LIST));
+    cur_a = a;
+    cur_b = b;
+    while(cur_a) {
+        if(A_LIST[cur_a]) {
+            printf("loop on %d\n", cur_a);
+            for(; a != cur_a; a = q->nodes[a].next) {
+                printf("-> %d ", a);
+            }
+            return 1;
+        }
+        A_LIST[cur_a] = 1;
+        cur_a = q->nodes[cur_a].next;
+    }
+    while(cur_b) {
+        if(B_LIST[cur_b]) {
+            printf("loop on %d\n", cur_b);
+            return 1;
+        }
+        if(A_LIST[cur_b]) {
+            printf("collision on %d\n", cur_b);
+            return 1;
+        }
+        B_LIST[cur_b] = 1;
+        cur_b = q->nodes[cur_b].next;
+    }
+    return 0;
+}
+
+
 //merge two qnode lists, maintaining ascending order
 static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     Qdigest_node *nodes;
     short head, tail, freed;
     short param_a, param_b;
+    assert(find_errors(q, a, b) == 0);
     param_a = a;
     param_b = b;
     assert(a != b);
@@ -101,6 +139,8 @@ static inline short merge_qnode_lists(Qdigest *q, short a, short b) {
     tail = head;
     while(a && b) {
         assert(a != b);
+        assert(a > 0);
+        assert(b > 0);
         if(nodes[a].min < nodes[b].min) {
             assert(nodes[a].next != b);
             nodes[tail].next = a;
@@ -176,7 +216,9 @@ static inline short sort_and_compress(Qdigest *q, short head) {
     nodes = q->nodes;
     unsorted_head = head;
     next = unsorted_head;  // just incase unsorted_head is 0, so next is initialized
+    printf("sort_and_compress phase 1\n");
     while(unsorted_head) { // combine same length lists until unsorted input exhausted
+        printf("starting new triangle from length 1\n");
         if(sorters[0] == 0) {
             sorters[0] = unsorted_head;
             unsorted_head = nodes[unsorted_head].next;
@@ -193,6 +235,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         // the next position in sorters, or merge with the list in that position
         // if one already exists
         for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter]; cur_sorter++) {
+            printf("moving to triangle segment of length 2**%d\n", cur_sorter);
             assert(next != sorters[cur_sorter]);
             next = merge_qnode_lists(q, next, sorters[cur_sorter]);
             sorters[cur_sorter] = 0;  // nodes of sorters[cur_sorter] now belong to next
@@ -200,6 +243,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         assert(cur_sorter < SORTERS_LEN);
         sorters[cur_sorter] = next;
     }
+    printf("sort_and_compress phase 2\n");
     // combine differently lengthed lists till there is only one
     // find the first valid linked list in sorters
     for(cur_sorter = 0; cur_sorter < SORTERS_LEN; cur_sorter++) {
@@ -209,11 +253,15 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         }
     }
     // roll up all the elements in sorters
+    printf("sort_and_compress phase 3\n");
     for(; cur_sorter < SORTERS_LEN; cur_sorter++) {
+        printf("%d ", cur_sorter);
         if(sorters[cur_sorter] == 0) { continue; }
+        printf("merging list of length 2**%d\n", cur_sorter);
         next = merge_qnode_lists(q, sorters[cur_sorter], next);
     }
     // de-duplicate nodes
+    printf("sort_and_compress phase 4\n");
     de_duplicate_sorted_list(q, next);
     return next;
 }
@@ -297,11 +345,13 @@ static inline void compress_generation(Qdigest *q, short cur_nodes, short parent
 static inline void compress(Qdigest *q) {
     short i;  // don't use char to avoid compiler warnings, even tho max is 32
     short new_nodes;
+    printf("calling sort_and_compress on new inputs\n");
     new_nodes = sort_and_compress(q, q->new_head);
     q->new_head = q->new_tail = 0;
     q->generations[0] = merge_qnode_lists(
         q, q->generations[0], new_nodes);
     for(i=0; q->num_free < q->k && i < 31; i++) {
+        printf("compressing generation %d\n", i);
         if(q->generations[i] == 0) { continue; }
         compress_generation(q, q->generations[i], q->generations[i+1], i);
     }
@@ -314,10 +364,15 @@ union converter {
 };
 
 
+int count = 0;
+
 void qdigest_update(Qdigest *q, float x) {
+    if(count++ % 1000 == 0) printf("qdigested %d points\n", count);
     short new_node;
     union converter convert;
     if(!q->num_free) {
+        printf("compressing\n");
+        q->nodes[q->new_tail].next = 0;
         compress(q);
     }
     new_node = qdigest_alloc(q);

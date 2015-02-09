@@ -52,7 +52,7 @@ def online_kurtosis(data):
 
 
 def test():
-    random.seed(103)  # make test repeatable
+    # random.seed(103)  # make test repeatable
     data = [random.normalvariate(1.0, 1.0) for i in range(int(1e6))]
     stats = Stats()
     start = time.time()
