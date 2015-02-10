@@ -78,6 +78,15 @@ static inline void qdigest_free(Qdigest *q, short index) {
 unsigned char A_LIST[64 * 1024];
 unsigned char B_LIST[64 * 1024];
 
+
+static void _print_list(Qdigest *q, short from, short to) {
+    for(; from != to; from = q->nodes[from].next) {
+        printf("%d->", from);
+    }
+    printf("%d\n", to);
+}
+
+
 static int find_errors(Qdigest *q, short a, short b) {
     short cur_a, cur_b;
     memset(A_LIST, 0, sizeof(A_LIST));
@@ -87,9 +96,7 @@ static int find_errors(Qdigest *q, short a, short b) {
     while(cur_a) {
         if(A_LIST[cur_a]) {
             printf("loop on %d\n", cur_a);
-            for(; a != cur_a; a = q->nodes[a].next) {
-                printf("-> %d ", a);
-            }
+            _print_list(q, a, cur_a);
             return 1;
         }
         A_LIST[cur_a] = 1;
@@ -98,10 +105,13 @@ static int find_errors(Qdigest *q, short a, short b) {
     while(cur_b) {
         if(B_LIST[cur_b]) {
             printf("loop on %d\n", cur_b);
+            _print_list(q, b, cur_b);
             return 1;
         }
         if(A_LIST[cur_b]) {
             printf("collision on %d\n", cur_b);
+            _print_list(q, a, cur_b);
+            _print_list(q, b, cur_b);
             return 1;
         }
         B_LIST[cur_b] = 1;
@@ -249,6 +259,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
     for(cur_sorter = 0; cur_sorter < SORTERS_LEN; cur_sorter++) {
         if(sorters[cur_sorter]) {
             next = sorters[cur_sorter];
+            cur_sorter++;
             break;
         }
     }
