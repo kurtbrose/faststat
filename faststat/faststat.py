@@ -12,6 +12,12 @@ import math
 import collections
 import time
 import functools
+try:
+    # location in Python 2.7 and 3.1
+    from weakref import WeakSet
+except ImportError:
+    # separately installed
+    from weakrefset import WeakSet
 
 import _faststat
 
@@ -50,7 +56,7 @@ UINT_BUCKETS = (1, 2, 3, 4, 5, 6, 7, 8, 9) + sum(
 # useful buckets for signed integers up to 64 bits
 INT_BUCKETS = tuple(reversed([-e for e in UINT_BUCKETS[:-3]])) + (0,) + UINT_BUCKETS[:-3]
 
-DEFAULT_BUCKETS = (1e-5, 1e-4, 1e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
+DEFAULT_BUCKETS = (0, 1e-5, 1e-4, 1e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
     10, 20, 50, 100, 200, 500, 1e3, 2e3, 5e3, 1e4, 1e5, 1e6)
 DEFAULT_BUCKETS = tuple(reversed([-e for e in DEFAULT_BUCKETS])) + (0,) + DEFAULT_BUCKETS
 
@@ -204,9 +210,9 @@ class Markov(object):
     def __init__(self):
         self.state_durations  = collections.defaultdict(Duration)
         self.transition_intervals = collections.defaultdict(Interval)
-        self.transitor_states = collections.defaultdict(weakref.WeakSet)
+        self.transitor_states = collections.defaultdict(WeakSet)
         self.state_counts = collections.defaultdict(functools.partial(Stats, interval=False))
- 
+
     def _transition(self, nxt, cur=None, since=None):
         '''
         Register that a transition has taken place.
@@ -217,13 +223,13 @@ class Markov(object):
         self.transition_intervals[(cur, nxt)].tick()
         if since:
             self.state_durations[cur].end(since)
- 
+
     def make_transitor(self, state):
         '''
         Creates and returns a new Markov.Transitor, in the passed state.
         '''
         return Markov.Transitor(self, state)
- 
+
     class Transitor(object):
         '''
         An extremely light-weight object that simply tracks a current
@@ -237,7 +243,7 @@ class Markov(object):
             state_set.add(self)
             self.markov.state_counts[state].add(len(state_set))
             self.last_transition = nanotime()
- 
+
         def transition(self, state):
             '''
             Notify the parent Markov stats object of a transition
@@ -251,7 +257,7 @@ class Markov(object):
             self.markov.state_counts[state].add(len(new_state_set))
             self.markov._transition(state, self.state, self.last_transition)
             self.last_transition, self.state = nanotime(), state
- 
+
         def __repr__(self):
             return '<faststat.Markov.Transitor({0})>'.format(self.state)
 
@@ -266,3 +272,26 @@ def _sigfigs(n, sigfigs=3):
     if n == 0 or math.isnan(n):  # avoid math domain errors
         return n
     return round(n, -int(math.floor(math.log10(abs(n))) - sigfigs + 1))
+
+
+def merge_moments(m_a, m_a2, m_a3, m_a4, n_a, m_b, m_b2, m_b3, m_b4, n_b):
+    '''
+    Merge moments of two samples A and B.
+    parameters are 
+    m_a, ..., m_a4 = first through fourth moment of sample A
+    n_a = size of sample A
+    m_b, ..., m_b4 = first through fourth moment of sample B
+    n_b = size of sample B
+    '''
+    delta = m_b - m_a
+    delta_2 = delta * delta
+    delta_3 = delta * delta_2
+    delta_4 = delta * delta_3
+    n_x = n_a + n_b
+    m_x = m_a + delta * n_b / n_x
+    m_x2 = m_a2 + m_b2 + delta_2 * n_a * n_b / n_x
+    m_x3 = m_a3 + m_b3 + delta_3 * n_a * n_b * (n_a - n_b) + 3 * delta * (n_a * m_2b - n_b * m_2a) / n_x
+    m_x4 = (m_a4 + m_b4 + delta_4 * (n_a * n_b * (n_a * n_a - n_a * n_b + n_b * n_b)) / (n_x ** 3) +
+            6 * delta_2 * (n_a * n_a * m_b2 + n_b * n_b * m_a2) / (n_x ** 2) +
+            4 * delta * (n_a * m_b3 - n_b * m_a3) / n_x )
+    return m_x, m_x2, m_x3, m_x4, n_x
