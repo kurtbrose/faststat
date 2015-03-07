@@ -220,8 +220,8 @@ static PyObject* faststat_Stats_new(PyTypeObject *type, PyObject *args, PyObject
             num_top = 1;
         }
         self->num_top = num_top;
-        self->topN = PyMem_New(faststat_DataPoint, num_prev);
-        memset(self->topN, 0, sizeof(faststat_DataPoint) * num_prev);
+        self->topN = PyMem_New(faststat_DataPoint, num_top);
+        memset(self->topN, 0, sizeof(faststat_DataPoint) * num_top);
         self->topN -= 1; //use 1 based indexing
 
         self->num_window_counts = num_window_counts;
@@ -273,6 +273,9 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
     }
     if(self->lastN) {
         PyMem_Del(self->lastN);
+    }
+    if(self->topN) {
+        PyMem_Del(self->topN + 1);  // undo 1-based indexing
     }
     if(self->window_counts) {
         // see constructor; all window_counts are allocated as one chunk
