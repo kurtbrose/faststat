@@ -12,6 +12,8 @@ import math
 import collections
 import time
 import functools
+import json
+import os.path
 try:
     # location in Python 2.7 and 3.1
     from weakref import WeakSet
@@ -295,3 +297,26 @@ def merge_moments(m_a, m_a2, m_a3, m_a4, n_a, m_b, m_b2, m_b3, m_b4, n_b):
             6 * delta_2 * (n_a * n_a * m_b2 + n_b * n_b * m_a2) / (n_x ** 2) +
             4 * delta * (n_a * m_b3 - n_b * m_a3) / n_x )
     return m_x, m_x2, m_x3, m_x4, n_x
+
+
+def stat2json(stat):
+    prev = [stat.get_prev(i) for i in range(stat.num_prev)]
+    prev = [(p[0]/1e6, p[1]) for p in prev]
+    return json.dumps({
+        "n": stat.n,
+        "mean": stat.mean,
+        "max": stat.max,
+        "min": stat.min,
+        "percentiles": stat.get_percentiles(),
+        "prev": prev
+        })
+
+
+TEMPLATE = None
+
+def stat2html(stat):
+    global TEMPLATE
+    if TEMPLATE is None:
+        TEMPLATE = open(os.path.join(os.path.dirname(__file__), "faststat.html")).read()
+    return TEMPLATE.replace('"==THE_STAT=="', stat2json(stat))
+

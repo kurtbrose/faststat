@@ -5,6 +5,7 @@ http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_st
 import random
 import time
 from faststat import Stats
+import faststat
 
 
 def p2_parabolic(l_v, l_n, c_v, c_n, r_v, r_n, d):
@@ -52,7 +53,7 @@ def online_kurtosis(data):
 
 
 def test():
-    random.seed(103)  # make test repeatable
+    # random.seed(103)  # make test repeatable
     data = [random.normalvariate(1.0, 1.0) for i in range(int(1e6))]
     stats = Stats()
     start = time.time()
@@ -71,6 +72,7 @@ def test():
     print "expo_avgs (should be 1)", stats.expo_avgs
     print "window_counts", stats.get_window_counts()
     print "top 10", sorted(stats.get_topN())[-10:]
+    open('test_html.html', 'w').write(faststat.stat2html(stats))
     return stats
 
 
