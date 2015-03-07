@@ -725,8 +725,8 @@ static PyObject* faststat_Stats_get_topN(faststat_Stats *self, PyObject *args) {
     PyObject *ret;
     unsigned int i;
     ret = PyList_New(self->num_top);
-    for(i=0; i<self->num_top; i++) {
-        PyList_SetItem(ret, i, Py_BuildValue(
+    for(i=1; i<self->num_top + 1; i++) {
+        PyList_SetItem(ret, i - 1, Py_BuildValue(
             "(dK)", self->topN[i].value, self->topN[i].nanotime));
     }
     if(PyErr_Occurred()) { 
