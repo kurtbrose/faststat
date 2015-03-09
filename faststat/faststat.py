@@ -326,6 +326,7 @@ JAVASCRIPT_HTML_HEAD = '''
     function faststat_histogram_chart(faststat, container) {
       var svg = dimple.newSvg(container, 590, 400);
       // var avg_density = faststat.n / (faststat.max - faststat.min);
+      var width = faststat.max - faststat.min
       var chart = new dimple.chart(svg);
       var x = chart.addMeasureAxis("x", "Value");
       chart.addMeasureAxis("y", "Density");
@@ -335,12 +336,12 @@ JAVASCRIPT_HTML_HEAD = '''
         //the value is the minimum, the density is percentage divided by width
         {"percentile": "min", "Value": faststat.min, "Density": 0},
         {"percentile": 0, "Value": faststat.min, "Density": (0.25 - 0) / (faststat.percentiles[0.25] - faststat.min)},
-        {"percentile": 25, "Value": faststat.percentiles[0.25], "Density": (0.5 - 0.25) / (faststat.percentiles[0.5] - faststat.percentiles[0.25])},
-        {"percentile": 50, "Value": faststat.percentiles[0.5], "Density": (0.75 - 0.5) / (faststat.percentiles[0.75] - faststat.percentiles[0.5])},
-        {"percentile": 75, "Value": faststat.percentiles[0.75], "Density": (0.9 - 0.75) / (faststat.percentiles[0.9] - faststat.percentiles[0.75])},
-        {"percentile": 90, "Value": faststat.percentiles[0.9], "Density": (0.95 - 0.9) / (faststat.percentiles[0.95] - faststat.percentiles[0.9])},
-        {"percentile": 95, "Value": faststat.percentiles[0.95], "Density": (0.99 - 0.95) / (faststat.percentiles[0.99] - faststat.percentiles[0.95])},
-        {"percentile": 99, "Value": faststat.percentiles[0.99], "Density": (1.0 - 0.99) / (faststat.max - faststat.percentiles[0.99])},
+        {"percentile": 25, "Value": faststat.percentiles[0.25], "Density": (0.5 - 0.25) * width / (faststat.percentiles[0.5] - faststat.percentiles[0.25])},
+        {"percentile": 50, "Value": faststat.percentiles[0.5], "Density": (0.75 - 0.5) * width / (faststat.percentiles[0.75] - faststat.percentiles[0.5])},
+        {"percentile": 75, "Value": faststat.percentiles[0.75], "Density": (0.9 - 0.75) * width / (faststat.percentiles[0.9] - faststat.percentiles[0.75])},
+        {"percentile": 90, "Value": faststat.percentiles[0.9], "Density": (0.95 - 0.9) * width / (faststat.percentiles[0.95] - faststat.percentiles[0.9])},
+        {"percentile": 95, "Value": faststat.percentiles[0.95], "Density": (0.99 - 0.95) * width / (faststat.percentiles[0.99] - faststat.percentiles[0.95])},
+        {"percentile": 99, "Value": faststat.percentiles[0.99], "Density": (1.0 - 0.99) * width / (faststat.max - faststat.percentiles[0.99])},
         {"percentile": 100, "Value": faststat.max, "Density": 0}
       ];
       for(var i=0; i<histogram.data.length; i++) {
