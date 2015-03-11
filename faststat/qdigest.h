@@ -213,6 +213,17 @@ static inline void de_duplicate_sorted_list(Qdigest *q, short head) {
 }
 
 
+static int _list_len(Qdigest *q, short start) {
+    int len;
+    len = 0;
+    while(start && len < 1024 * 1024) {
+        len++;
+        start = q->nodes[start].next;
+    }
+    return len;
+}
+
+
 #define SORTERS_LEN 16
 
 //given an initially unsorted list of qnodes, sort them and merge duplicates
@@ -247,6 +258,7 @@ static inline short sort_and_compress(Qdigest *q, short head) {
         for(cur_sorter = 0; cur_sorter < SORTERS_LEN && sorters[cur_sorter]; cur_sorter++) {
             printf("moving to triangle segment of length 2**%d\n", cur_sorter);
             assert(next != sorters[cur_sorter]);
+            assert(_list_len(q, next) <= _list_len(q, sorters[cur_sorter]));
             next = merge_qnode_lists(q, next, sorters[cur_sorter]);
             sorters[cur_sorter] = 0;  // nodes of sorters[cur_sorter] now belong to next
         }
