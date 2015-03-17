@@ -22,6 +22,7 @@ except ImportError:
     from weakrefset import WeakSet
 
 import _faststat
+import cache
 
 
 class Sample(object):
@@ -262,6 +263,57 @@ class Markov(object):
 
         def __repr__(self):
             return '<faststat.Markov.Transitor({0})>'.format(self.state)
+
+
+class PathTree(object):
+    '''
+    Represents a set of paths taken.  Unlike Markov, these states remember
+    their "history".
+
+    Because there are likely to be many more paths than states, the Path
+    is more aggressively memory optimized, and also employs a SegmentedCache
+    internally to limit the number of unique path durations that will be
+    stored.
+    '''
+    def __init__(self, maxsize=2048):
+        self.state_durations = cache.SegmentedCache(maxsize)
+
+    def make_walker(self, start):
+        return PathTree.Walker(self, (start,))
+
+    def _finished_segment(self, path, since):
+        if path not in self.state_durations:
+            self.state_durations[path] = Duration(interval=False)
+        self.state_durations[path].end(since)
+
+    class Walker(object):
+        '''
+        A light-weight object that tracks a current path and the time of
+        the last transition.  Similar to Tranistor for Markov.
+        '''
+        def __init__(self, pathtree, sofar=()):
+            self.pathtree = pathtree
+            self.sofar = sofar
+            self.last_transition = nanotime()
+
+        def push(self, segment):
+            '''
+            pushes a new segment onto the path, closing out the previous segment
+            '''
+            self.pathtree._finished_segment(self.sofar, self.last_transition)
+            self.sofar += (segment,)
+            self.last_transition = nanotime()
+
+        def pop(self):
+            self.push(PathTree.POP)
+
+        def branch(self):
+            return PathTree.Walker(self.pathtree, self.sofar + (PathTree.BRANCH,))
+
+        def join(self, walker):
+            self.push((PathTree.JOIN, walker.sofar))
+
+    BRANCH, JOIN, POP = object(), object(), object()
 
 
 TimeSeries = functools.partial(Stats, interval=False)

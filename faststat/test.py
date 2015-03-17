@@ -75,6 +75,18 @@ def test():
     open('test_html.html', 'w').write(faststat.stat2html(stats))
     return stats
 
+def test_breadth():
+    m = faststat.Markov()
+    t = m.make_transitor('foo')
+    t.transition('bar')
+
+    p = faststat.PathTree()
+    w = p.make_walker('foo')
+    w.push('bar')
+    b = w.branch()
+    w.join(b)
+
 
 if __name__ == "__main__":
+    test_breadth()
     test()
