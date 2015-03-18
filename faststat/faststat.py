@@ -274,17 +274,80 @@ class PathTree(object):
     is more aggressively memory optimized, and also employs a SegmentedCache
     internally to limit the number of unique path durations that will be
     stored.
+
+    Note that common prefixes on two paths will not have independent
+    statistics.  For example:
+
+    [read-input] -> [do_foo] -> [write-output]
+    [read-input] -> [do_bar] -> [write-output]
+
+    This will result in 5 distinct durations tracked, not 6.
+    Because [read-input] is a common prefix, the durations of
+    [do-foo] and [do-bar]'s [read-input] will not be separately
+    tracked.
     '''
     def __init__(self, maxsize=2048):
-        self.state_durations = cache.SegmentedCache(maxsize)
+        self.state_stats = cache.SegmentedCache(maxsize)
 
     def make_walker(self, start):
+        'returns a walker object that tracks a path'
         return PathTree.Walker(self, (start,))
 
-    def _finished_segment(self, path, since):
-        if path not in self.state_durations:
-            self.state_durations[path] = Duration(interval=False)
-        self.state_durations[path].end(since)
+    def pformat(self, prefix=()):
+        '''
+        Makes a pretty ASCII format of the data, suitable for
+        displaying in a console or saving to a text file.
+        Returns a list of lines.
+        '''
+        nan = float("nan")
+
+        def sformat(segment, stats):
+            FMT = "n={0}, mean={1}, p50/95={2}/{3}, max={4}"
+            line_segs = [segment]
+            for s in stats:
+                n, mean, max = s.n, s.mean, s.max
+                p = s.get_percentiles()
+                p50, p95 = p.get(50, nan), p.get(95, nan)
+                line_segs.append(FMT.format(
+                    *[_sigfigs(e) for e in (n, mean, p50, p95, max)]))
+            return '{0}: dur({1}), start({2})'.format(*line_segs)
+
+        lines = []
+        for path in self.unique_paths():
+            cur = ()
+            lines.append('=====================')
+            for seg in path:
+                cur += (seg,)
+                stats = self.state_stats[cur]
+                if cur[0]:
+                    lines.append(sformat(seg, stats))
+                else:
+                    lines.append(seg)
+        return lines
+
+    def unique_paths(self):
+        'return a list of all of the unique paths'
+        all_paths = self.state_stats.keys()
+        branches = set()
+        leaves = set()
+        for path in all_paths:
+            cur = ()
+            for segment in path:
+                branches.add(cur)
+                if cur in leaves:
+                    leaves.remove(cur)
+                cur += (segment,)
+            if cur not in branches:
+                leaves.add(cur)
+        return sorted(leaves)
+
+    def _finished_segment(self, path, since, start):
+        if path not in self.state_stats:
+            self.state_stats[path] = (
+                Duration(interval=False), Duration(interval=False))
+        dur, offset = self.state_stats[path]
+        dur.end(since)
+        offset.end(start)
 
     class Walker(object):
         '''
@@ -294,13 +357,14 @@ class PathTree(object):
         def __init__(self, pathtree, sofar=()):
             self.pathtree = pathtree
             self.sofar = sofar
-            self.last_transition = nanotime()
+            self.start_time = self.last_transition = nanotime()
 
         def push(self, segment):
             '''
             pushes a new segment onto the path, closing out the previous segment
             '''
-            self.pathtree._finished_segment(self.sofar, self.last_transition)
+            self.pathtree._finished_segment(
+                self.sofar, self.last_transition, self.start_time)
             self.sofar += (segment,)
             self.last_transition = nanotime()
 
@@ -308,12 +372,19 @@ class PathTree(object):
             self.push(PathTree.POP)
 
         def branch(self):
-            return PathTree.Walker(self.pathtree, self.sofar + (PathTree.BRANCH,))
+            child = PathTree.Walker(
+                self.pathtree, self.sofar + (PathTree.BRANCH_C,))
+            self.push(PathTree.BRANCH_P)
+            return child
 
         def join(self, walker):
             self.push((PathTree.JOIN, walker.sofar))
+            walker.push(PathTree.JOINED)
 
-    BRANCH, JOIN, POP = object(), object(), object()
+    BRANCH_P, BRANCH_C, JOIN, JOINED, POP = "BRANCH_P", "BRANCH_C", "JOIN", "JOINED", "POP"
+
+    def __repr__(self):
+        return "<PathTree npaths={0}>".format(len(self.state_stats))
 
 
 TimeSeries = functools.partial(Stats, interval=False)
