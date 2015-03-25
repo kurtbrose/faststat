@@ -260,6 +260,7 @@ class Markov(object):
             new_state_count = self.markov.transitor_states[state]
             self.markov.state_counts[self.state].add(old_state_count)
             self.markov.state_counts[state].add(new_state_count)
+            self.markov._weakref_holder[self.weakref] = state
             self.markov._transition(state, self.state, self.last_transition)
             self.last_transition, self.state = nanotime(), state
 
