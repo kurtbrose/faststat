@@ -13,13 +13,7 @@ import collections
 import time
 import functools
 import json
-import os.path
-try:
-    # location in Python 2.7 and 3.1
-    from weakref import WeakSet
-except ImportError:
-    # separately installed
-    from weakrefset import WeakSet
+import weakref
 
 import _faststat
 import cache
@@ -213,7 +207,8 @@ class Markov(object):
     def __init__(self):
         self.state_durations  = collections.defaultdict(Duration)
         self.transition_intervals = collections.defaultdict(Interval)
-        self.transitor_states = collections.defaultdict(WeakSet)
+        self.transitor_states = collections.defaultdict(int)
+        self._weakref_holder = {}
         self.state_counts = collections.defaultdict(functools.partial(Stats, interval=False))
 
     def _transition(self, nxt, cur=None, since=None):
@@ -233,6 +228,11 @@ class Markov(object):
         '''
         return Markov.Transitor(self, state)
 
+    def _cleanup(self, ref):
+        'cleanup after a transitor weakref fires'
+        self.transitor_states[self._weakref_holder[ref]] -= 1
+        del self._weakref_holder[ref]
+
     class Transitor(object):
         '''
         An extremely light-weight object that simply tracks a current
@@ -242,9 +242,11 @@ class Markov(object):
             self.markov = markov
             self.state = state
             self.markov._transition(state)
-            state_set = self.markov.transitor_states[state]
-            state_set.add(self)
-            self.markov.state_counts[state].add(len(state_set))
+            self.markov.transitor_states[state] += 1
+            state_count = self.markov.transitor_states[state]
+            self.markov.state_counts[state].add(state_count)
+            self.weakref = weakref.ref(self, markov._cleanup)
+            self.markov._weakref_holder[self.weakref] = state
             self.last_transition = nanotime()
 
         def transition(self, state):
@@ -252,12 +254,12 @@ class Markov(object):
             Notify the parent Markov stats object of a transition
             from the current state to the passed state.
             '''
-            old_state_set = self.markov.transitor_states[self.state]
-            new_state_set = self.markov.transitor_states[state]
-            old_state_set.remove(self)
-            new_state_set.add(self)
-            self.markov.state_counts[self.state].add(len(old_state_set))
-            self.markov.state_counts[state].add(len(new_state_set))
+            self.markov.transitor_states[self.state] -= 1
+            self.markov.transitor_states[state] += 1
+            old_state_count = self.markov.transitor_states[self.state]
+            new_state_count = self.markov.transitor_states[state]
+            self.markov.state_counts[self.state].add(old_state_count)
+            self.markov.state_counts[state].add(new_state_count)
             self.markov._transition(state, self.state, self.last_transition)
             self.last_transition, self.state = nanotime(), state
 
