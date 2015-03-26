@@ -268,7 +268,7 @@ class Markov(object):
             return '<faststat.Markov.Transitor({0})>'.format(self.state)
 
 
-class PathTree(object):
+class PathStats(object):
     '''
     Represents a set of paths taken.  Unlike Markov, these states remember
     their "history".
@@ -277,24 +277,29 @@ class PathTree(object):
     is more aggressively memory optimized, and also employs a SegmentedCache
     internally to limit the number of unique path durations that will be
     stored.
-
-    Note that common prefixes on two paths will not have independent
-    statistics.  For example:
-
-    [read-input] -> [do_foo] -> [write-output]
-    [read-input] -> [do_bar] -> [write-output]
-
-    This will result in 5 distinct durations tracked, not 6.
-    Because [read-input] is a common prefix, the durations of
-    [do-foo] and [do-bar]'s [read-input] will not be separately
-    tracked.
     '''
     def __init__(self, maxsize=2048):
-        self.state_stats = cache.SegmentedCache(maxsize)
+        self.path_stats = cache.SegmentedCache(maxsize)
+        self._weakref_path_map = {}
 
     def make_walker(self, start):
         'returns a walker object that tracks a path'
-        return PathTree.Walker(self, (start,))
+        return PathTree.Walker(self, start)
+
+    def _commit(self, ref):
+        'commit a walkers data after it is collected'
+        path_times = self._weakref_path_map[ref]
+        path_times.append(nanotime())
+        del self._weakref_path_map[ref]
+        path = tuple(path_times[1::2])
+        times = path_times[::2]
+        if path not in self.path_stats:
+            # tuple to save a tiny bit of memory
+            self.path_stats[path] = tuple([
+                Stats(interval=False) for i in range(len(path))])
+        path_stats = self.path_stats[path]
+        for i in range(1, len(times)):
+            path_stats[i - 1].add(times[i] - times[i - 1])
 
     def pformat(self, prefix=()):
         '''
@@ -304,45 +309,23 @@ class PathTree(object):
         '''
         nan = float("nan")
 
-        def sformat(segment, stats):
+        def sformat(segment, stat):
             FMT = "n={0}, mean={1}, p50/95={2}/{3}, max={4}"
             line_segs = [segment]
-            for s in stats:
+            for s in [stat]:
                 n, mean, max = s.n, s.mean, s.max
                 p = s.get_percentiles()
                 p50, p95 = p.get(50, nan), p.get(95, nan)
                 line_segs.append(FMT.format(
                     *[_sigfigs(e) for e in (n, mean, p50, p95, max)]))
-            return '{0}: dur({1}), start({2})'.format(*line_segs)
+            return '{0}: {1}'.format(*line_segs)
 
         lines = []
-        for path in self.unique_paths():
-            cur = ()
+        for path in sorted(self.path_stats.keys()):
             lines.append('=====================')
-            for seg in path:
-                cur += (seg,)
-                stats = self.state_stats[cur]
-                if cur[0]:
-                    lines.append(sformat(seg, stats))
-                else:
-                    lines.append(seg)
+            for seg, stat in zip(path, self.path_stats[path]):
+                lines.append(sformat(seg, stat))
         return lines
-
-    def unique_paths(self):
-        'return a list of all of the unique paths'
-        all_paths = self.state_stats.keys()
-        branches = set()
-        leaves = set()
-        for path in all_paths:
-            cur = ()
-            for segment in path:
-                branches.add(cur)
-                if cur in leaves:
-                    leaves.remove(cur)
-                cur += (segment,)
-            if cur not in branches:
-                leaves.add(cur)
-        return sorted(leaves)
 
     def _finished_segment(self, path, since, start):
         if path not in self.state_stats:
@@ -357,31 +340,31 @@ class PathTree(object):
         A light-weight object that tracks a current path and the time of
         the last transition.  Similar to Tranistor for Markov.
         '''
-        def __init__(self, pathtree, sofar=()):
+        def __init__(self, pathtree, segment=None):
             self.pathtree = pathtree
-            self.sofar = sofar
-            self.start_time = self.last_transition = nanotime()
+            self._commiter = weakref.ref(self, self.pathtree._commit)
+            self.path = self.pathtree._weakref_path_map[self._commiter] = [nanotime()]
+            self.curseg = segment
 
         def push(self, segment):
             '''
             pushes a new segment onto the path, closing out the previous segment
             '''
-            self.pathtree._finished_segment(
-                self.sofar, self.last_transition, self.start_time)
-            self.sofar += (segment,)
-            self.last_transition = nanotime()
+            self.path.append(self.curseg)
+            self.path.append(nanotime())
+            self.curseg = segment
 
         def pop(self):
             self.push(PathTree.POP)
 
         def branch(self):
             child = PathTree.Walker(
-                self.pathtree, self.sofar + (PathTree.BRANCH_C,))
+                self.pathtree, PathTree.BRANCH_C)
             self.push(PathTree.BRANCH_P)
             return child
 
         def join(self, walker):
-            self.push((PathTree.JOIN, walker.sofar))
+            self.push((PathTree.JOIN, tuple(walker.path)))
             walker.push(PathTree.JOINED)
 
     BRANCH_P, BRANCH_C, JOIN, JOINED, POP = "BRANCH_P", "BRANCH_C", "JOIN", "JOINED", "POP"

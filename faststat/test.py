@@ -90,6 +90,7 @@ def test_breadth():
     b.push('branch2')
     w.join(b)
     w.push('end')
+    del w
 
     # import pprint
     #pprint.pprint(p.state_stats.keys())
