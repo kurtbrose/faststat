@@ -17,6 +17,7 @@ import weakref
 
 import _faststat
 import cache
+import format
 
 
 class Sample(object):
@@ -167,7 +168,27 @@ class Stats(_BaseStats):
             return getattr(self._stats, name)
 
 
-class Interval(_BaseStats):
+class _TimeStats(_BaseStats):
+    def get_percentiles(self):
+        data = self._stats.get_percentiles()
+        for k in data:
+            data[k] = ntd_float(data[k])
+        return data
+
+    @property
+    def mean(self):
+        return ntd_float(self._stats.mean)
+
+    @property
+    def max(self):
+        return ntd_float(self._stats.max)
+
+    @property
+    def min(self):
+        return ntd_float(self._stats.min)
+
+
+class Interval(_TimeStats):
     '''
     Call tick() to register occurrences.
     Note that calling tick() N times results in N-1 data points.
@@ -182,7 +203,7 @@ class Interval(_BaseStats):
             return getattr(self._stats, name)
 
 
-class Duration(_BaseStats):
+class Duration(_TimeStats):
     '''
     Represents statistics for a duration.
     Call end(start_time_nanos) to add a data point.
@@ -205,7 +226,7 @@ class Markov(object):
     Durations.
     '''
     def __init__(self):
-        self.state_durations  = collections.defaultdict(Duration)
+        self.state_durations = collections.defaultdict(Duration)
         self.transition_intervals = collections.defaultdict(Interval)
         self.transitor_states = collections.defaultdict(int)
         self._weakref_holder = {}
@@ -296,10 +317,10 @@ class PathStats(object):
         if path not in self.path_stats:
             # tuple to save a tiny bit of memory
             self.path_stats[path] = tuple([
-                Stats(interval=False) for i in range(len(path))])
+                Duration(interval=False) for i in range(len(path))])
         path_stats = self.path_stats[path]
         for i in range(1, len(times)):
-            path_stats[i - 1].add(times[i] - times[i - 1])
+            path_stats[i - 1]._stats.add(times[i] - times[i - 1])
 
     def pformat(self, prefix=()):
         '''
@@ -313,11 +334,9 @@ class PathStats(object):
             FMT = "n={0}, mean={1}, p50/95={2}/{3}, max={4}"
             line_segs = [segment]
             for s in [stat]:
-                n, mean, max = s.n, s.mean, s.max
                 p = s.get_percentiles()
-                p50, p95 = p.get(50, nan), p.get(95, nan)
-                line_segs.append(FMT.format(
-                    *[_sigfigs(e) for e in (n, mean, p50, p95, max)]))
+                p50, p95 = p.get(0.50, nan), p.get(0.95, nan)
+                line_segs.append(FMT.format(s.n, s.mean, p50, p95, s.max))
             return '{0}: {1}'.format(*line_segs)
 
         lines = []
@@ -371,6 +390,16 @@ class PathStats(object):
 
     def __repr__(self):
         return "<PathStats npaths={0}>".format(len(self.state_stats))
+
+
+class ntd_float(float):
+    'a float which represents the difference of two timestamps in nanoseconds'
+    def __repr__(self):
+        return format.si_format(self / 1e9, "s")
+
+    def __format__(self, format_spec):
+        return repr(self)
+
 
 TimeSeries = functools.partial(Stats, interval=False)
 nanotime = _faststat.nanotime
