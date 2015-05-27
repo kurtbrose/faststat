@@ -43,12 +43,17 @@ def si_round(val):
     return val, 3 * exp
 
  
-def si_format(val):
+def si_format(val, unit=''):
+    if math.isnan(val):
+        return "nan"
     val, exp = si_round(val)
     if exp:
-        exps = _SCALES.get(exp) or 'E' + str(exp)
+        if exp in _SCALES and unit:
+            exps = _SCALES[exp] + unit
+        else:
+            exps = 'e' + str(exp) + unit
     else:
-        exps = ''
+        exps = unit
     if val >= 100 or val <= -100:
         return '{0:0.0f}{1}'.format(val, exps)
     if val >= 10 or val <= -10:
@@ -89,6 +94,14 @@ def sib_format(val):
     if val >= 10 or val <= -10:
         return '{0:0.1f}{1}'.format(val, exps)
     return '{0:0.2f}{1}'.format(val, exps)
+
+
+def sigfigs(n, sigfigs=3):
+    'helper function to round a number to significant figures'
+    n = float(n)
+    if n == 0 or math.isnan(n):  # avoid math domain errors
+        return n
+    return round(n, -int(math.floor(math.log10(abs(n))) - sigfigs + 1))
 
 
 _SCALES = {
