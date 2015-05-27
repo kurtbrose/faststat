@@ -1,9 +1,11 @@
 import math
+import json
  
 
 def stat2json(stat):
     prev = [stat.get_prev(i) for i in range(stat.num_prev)]
-    prev = [(p[0]/1e6, p[1]) for p in prev if p[0]]  # timestamp = 0 means not yet valid
+    # timestamp = 0 means not yet valid
+    prev = [(p[0] / 1e6, p[1]) for p in prev if p[0]]
     return json.dumps({
         "n": stat.n,
         "mean": stat.mean,
@@ -11,7 +13,7 @@ def stat2json(stat):
         "min": stat.min,
         "percentiles": stat.get_percentiles(),
         "prev": prev
-        })
+    })
 
 
 def stat2html(stat):
@@ -34,31 +36,31 @@ def si_round(val):
     if exp < 0:
         exp = int(exp) - 1
     else:
-       exp = int(exp)
+        exp = int(exp)
     val = val / 1000.0 ** exp
     if neg:
-       val = -val
+        val = -val
     return val, 3 * exp
 
  
 def si_format(val):
-    val, exp = siround(val)
+    val, exp = si_round(val)
     if exp:
-       exps = _SCALES.get(exp) or 'E' + str(exp)
+        exps = _SCALES.get(exp) or 'E' + str(exp)
     else:
         exps = ''
     if val >= 100 or val <= -100:
-       return '{0:0.0f}{1}'.format(val, exps)
+        return '{0:0.0f}{1}'.format(val, exps)
     if val >= 10 or val <= -10:
         return '{0:0.1f}{1}'.format(val, exps)
     return '{0:0.2f}{1}'.format(val, exps)
 
 
 def sib_round(val):
-  '''
-  round to a binary SI tuple of (factor, exponent)
-  such that 1 < factor < 1024, and factor * 1024 ** exponent == val
-  '''
+    '''
+    round to a binary SI tuple of (factor, exponent)
+    such that 1 < factor < 1024, and factor * 1024 ** exponent == val
+    '''
     if val < 0:
         neg = True
         val = -val
@@ -78,12 +80,12 @@ def sib_round(val):
 
 
 def sib_format(val):
-    val, exp = sibround(val)
-    if exp < 0 or exp > len(BSCALES):
+    val, exp = sib_round(val)
+    if exp < 0 or exp > len(_BSCALES):
         raise ValueError("{0} out of format range", val)
     exps = _BSCALES[exp]
     if val >= 100 or val <= -100:
-       return '{0:0.0f}{1}'.format(val, exps)
+        return '{0:0.0f}{1}'.format(val, exps)
     if val >= 10 or val <= -10:
         return '{0:0.1f}{1}'.format(val, exps)
     return '{0:0.2f}{1}'.format(val, exps)
