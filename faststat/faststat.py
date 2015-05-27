@@ -312,6 +312,7 @@ class PathStats(object):
         path_times = self._weakref_path_map[ref]
         path_times.append(nanotime())
         del self._weakref_path_map[ref]
+        print path_times
         path = tuple(path_times[1::2])
         times = path_times[::2]
         if path not in self.path_stats:
@@ -359,18 +360,18 @@ class PathStats(object):
         A light-weight object that tracks a current path and the time of
         the last transition.  Similar to Tranistor for Markov.
         '''
-        def __init__(self, pathstats, segment=None):
+        def __init__(self, pathstats, segment="NEW"):
             self.pathstats = pathstats
             self._commiter = weakref.ref(self, self.pathstats._commit)
-            self.path = self.pathstats._weakref_path_map[self._commiter] = [nanotime()]
-            self.curseg = segment
+            self.path = self.pathstats._weakref_path_map[self._commiter] = []
+            self.push(segment)
 
         def push(self, segment):
             '''
             pushes a new segment onto the path, closing out the previous segment
             '''
-            self.path.append(self.curseg)
             self.path.append(nanotime())
+            self.path.append(segment)
             self.curseg = segment
 
         def pop(self):
