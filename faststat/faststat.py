@@ -312,7 +312,6 @@ class PathStats(object):
         path_times = self._weakref_path_map[ref]
         path_times.append(nanotime())
         del self._weakref_path_map[ref]
-        print path_times
         path = tuple(path_times[1::2])
         times = path_times[::2]
         if path not in self.path_stats:
