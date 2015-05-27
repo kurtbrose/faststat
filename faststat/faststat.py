@@ -284,7 +284,7 @@ class PathStats(object):
 
     def make_walker(self, start):
         'returns a walker object that tracks a path'
-        return PathTree.Walker(self, start)
+        return PathStats.Walker(self, start)
 
     def _commit(self, ref):
         'commit a walkers data after it is collected'
@@ -340,10 +340,10 @@ class PathStats(object):
         A light-weight object that tracks a current path and the time of
         the last transition.  Similar to Tranistor for Markov.
         '''
-        def __init__(self, pathtree, segment=None):
-            self.pathtree = pathtree
-            self._commiter = weakref.ref(self, self.pathtree._commit)
-            self.path = self.pathtree._weakref_path_map[self._commiter] = [nanotime()]
+        def __init__(self, pathstats, segment=None):
+            self.pathstats = pathstats
+            self._commiter = weakref.ref(self, self.pathstats._commit)
+            self.path = self.pathstats._weakref_path_map[self._commiter] = [nanotime()]
             self.curseg = segment
 
         def push(self, segment):
@@ -355,23 +355,22 @@ class PathStats(object):
             self.curseg = segment
 
         def pop(self):
-            self.push(PathTree.POP)
+            self.push(PathStats.POP)
 
         def branch(self):
-            child = PathTree.Walker(
-                self.pathtree, PathTree.BRANCH_C)
-            self.push(PathTree.BRANCH_P)
+            child = PathStats.Walker(
+                self.pathstats, PathStats.BRANCH_C)
+            self.push(PathStats.BRANCH_P)
             return child
 
         def join(self, walker):
-            self.push((PathTree.JOIN, tuple(walker.path)))
-            walker.push(PathTree.JOINED)
+            self.push((PathStats.JOIN, tuple(walker.path)))
+            walker.push(PathStats.JOINED)
 
     BRANCH_P, BRANCH_C, JOIN, JOINED, POP = "BRANCH_P", "BRANCH_C", "JOIN", "JOINED", "POP"
 
     def __repr__(self):
-        return "<PathTree npaths={0}>".format(len(self.state_stats))
-
+        return "<PathStats npaths={0}>".format(len(self.state_stats))
 
 TimeSeries = functools.partial(Stats, interval=False)
 nanotime = _faststat.nanotime
