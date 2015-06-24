@@ -46,6 +46,10 @@ def si_round(val):
 def si_format(val, unit=''):
     if math.isnan(val):
         return "nan"
+    if math.isinf(val):
+        if val < 0:
+            return "-inf"
+        return "inf"
     val, exp = si_round(val)
     if exp:
         if exp in _SCALES and unit:
@@ -85,6 +89,12 @@ def sib_round(val):
 
 
 def sib_format(val):
+    if math.isnan(val):
+        return "nan"
+    if math.isinf(val):
+        if val < 0:
+            return "-inf"
+        return "inf"
     val, exp = sib_round(val)
     if exp < 0 or exp > len(_BSCALES):
         raise ValueError("{0} out of format range", val)
