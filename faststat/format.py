@@ -56,7 +56,7 @@ def si_format(val, unit=''):
             exps = _SCALES[exp] + unit
         elif exp == -3:
             # special case, do 0.123 instead of 123e-3
-            return "{0:0.3f}".format(val)
+            return "{0:0.3f}".format(val / 1e3)
         else:
             exps = 'e' + str(exp) + unit
     else:
