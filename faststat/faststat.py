@@ -347,8 +347,8 @@ class PathStats(object):
         return lines
 
     def _finished_segment(self, path, since, start):
-        if path not in self.state_stats:
-            self.state_stats[path] = (
+        if path not in self.path_stats:
+            self.path_stats[path] = (
                 Duration(interval=False), Duration(interval=False))
         dur, offset = self.state_stats[path]
         dur.end(since)
@@ -389,7 +389,7 @@ class PathStats(object):
     BRANCH_P, BRANCH_C, JOIN, JOINED, POP = "BRANCH_P", "BRANCH_C", "JOIN", "JOINED", "POP"
 
     def __repr__(self):
-        return "<PathStats npaths={0}>".format(len(self.state_stats))
+        return "<PathStats npaths={0}>".format(len(self.path_stats))
 
 
 class ntd_float(float):

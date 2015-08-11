@@ -13,7 +13,7 @@ _faststat = Extension('_faststat', sources=['faststat/_faststat.c'],
 
 setup(
     name='faststat',
-    version='0.2.1',
+    version='0.3.1',
     author="Kurt Rose",
     author_email="kurt@kurtrose.com",
     description='fast online statistics collection',
