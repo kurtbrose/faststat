@@ -282,6 +282,7 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
         PyMem_Del(self->window_counts[0].counts);
         PyMem_Del(self->window_counts);
     }
+    self->ob_type->tp_free((PyObject*)self);
 }
 
 #define STR_VAL(arg) #arg
