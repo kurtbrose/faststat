@@ -102,11 +102,13 @@ def sib_format(val):
     if exp < 0 or exp > len(_BSCALES):
         raise ValueError("{0} out of format range", val)
     exps = _BSCALES[exp]
+    if not exps:
+        return str(int(val)) + 'B'
     if val >= 100 or val <= -100:
-        return '{0:0.0f}{1}'.format(val, exps)
+        return '{0:0.0f}{1}B'.format(val, exps)
     if val >= 10 or val <= -10:
-        return '{0:0.1f}{1}'.format(val, exps)
-    return '{0:0.2f}{1}'.format(val, exps)
+        return '{0:0.1f}{1}B'.format(val, exps)
+    return '{0:0.2f}{1}B'.format(val, exps)
 
 
 def sigfigs(n, sigfigs=3):
