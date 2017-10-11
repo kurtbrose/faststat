@@ -6,6 +6,8 @@ import random
 import time
 from faststat import Stats
 import faststat
+import format
+# TODO: fix these to absolute imports
 
 
 def p2_parabolic(l_v, l_n, c_v, c_n, r_v, r_n, d):
@@ -72,7 +74,7 @@ def test():
     print "expo_avgs (should be 1)", stats.expo_avgs
     print "window_counts", stats.get_window_counts()
     print "top 10", sorted(stats.get_topN())[-10:]
-    open('test_html.html', 'w').write(faststat.stat2html(stats))
+    open('test_html.html', 'w').write(faststat.format.stat2html(stats))
     return stats
 
 

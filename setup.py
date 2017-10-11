@@ -1,5 +1,5 @@
 import platform
-from distutils.core import setup, Extension
+from setuptools import Extension, setup
 
 extra_compile_args = []
 if platform.system() == 'Windows':
@@ -13,7 +13,7 @@ _faststat = Extension('_faststat', sources=['faststat/_faststat.c'],
 
 setup(
     name='faststat',
-    version='0.3.1',
+    version='17.10.0',
     author="Kurt Rose",
     author_email="kurt@kurtrose.com",
     description='fast online statistics collection',
@@ -21,7 +21,7 @@ setup(
     url="http://github.com/doublereedkurt/faststat",
     long_description='...',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
     ],
     packages=['faststat'],
