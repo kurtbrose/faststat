@@ -1,2 +1,2 @@
-from faststat import *
-from format import *
+from .format import *
+from .faststat  import *

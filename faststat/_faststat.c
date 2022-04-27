@@ -282,7 +282,7 @@ static void faststat_Stats_dealloc(faststat_Stats* self) {
         PyMem_Del(self->window_counts[0].counts);
         PyMem_Del(self->window_counts);
     }
-    self->ob_type->tp_free((PyObject*)self);
+    Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 #define STR_VAL(arg) #arg
@@ -792,8 +792,7 @@ static PyMethodDef faststat_Stats_methods[] = {
 
 
 static PyTypeObject faststat_StatsType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                         /*ob_size*/
+    PyVarObject_HEAD_INIT(NULL, 0)
     "_faststat.Stats",          /*tp_name*/
     sizeof(faststat_Stats),    /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -852,7 +851,7 @@ static PyObject* pynanotime_override(PyObject *_, PyObject *args) {
 }
 
 
-static PyMethodDef module_methods[] = { 
+static PyMethodDef fastat_methods[] = { 
     {"nanotime", (PyCFunction)pynanotime, METH_NOARGS, 
         "get integral nanoseconds since unix epoch"},
     {"_nanotime_override", (PyCFunction)pynanotime_override, METH_VARARGS,
@@ -863,18 +862,65 @@ static PyMethodDef module_methods[] = {
 #ifndef PyMODINIT_FUNC  /* declarations for DLL import/export */
 #define PyMODINIT_FUNC void
 #endif
-PyMODINIT_FUNC init_faststat(void) {
+
+#if PY_MAJOR_VERSION >= 3
+
+static int fastat_traverse(PyObject *m, visitproc visit, void *arg) {
+    // no GC loops possible?
+    return 0;
+}
+
+static int fastat_clear(PyObject *m) {
+    // no GC loops possible?
+    return 0;
+}
+
+
+static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "myextension",
+        NULL,
+        0,
+        fastat_methods,
+        NULL,
+        fastat_traverse,
+        fastat_clear,
+        NULL
+};
+
+#define INITERROR return NULL
+
+PyMODINIT_FUNC
+PyInit__faststat(void)
+
+#else
+#define INITERROR return
+
+void
+    init_fasttat(void)
+#endif
+{
     PyObject *module;
 
-    if(PyType_Ready(&faststat_StatsType) < 0)
-        return;
+    if (PyType_Ready(&faststat_StatsType) < 0) {
+        INITERROR;
+    }
 
-    module = Py_InitModule3("_faststat", module_methods, "fast statistics");
+#if PY_MAJOR_VERSION >= 3
+    module = PyModule_Create(&moduledef);
+#else
+    module = Py_InitModule3("_faststat", fastat_methods, "fast statistics");
+#endif   
 
-    if(module == NULL)
-        return;
+    if(module == NULL) {
+        INITERROR;
+    }
 
     Py_INCREF(&faststat_StatsType);
     PyModule_AddObject(module, "Stats", (PyObject*)&faststat_StatsType);
     nanotime_override = 0;
+
+#if PY_MAJOR_VERSION >= 3
+    return module;
+#endif
 }

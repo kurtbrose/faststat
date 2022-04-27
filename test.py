@@ -4,9 +4,10 @@ http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_st
 '''
 import random
 import time
+
 from faststat import Stats
 import faststat
-import format
+from faststat import format 
 # TODO: fix these to absolute imports
 
 
@@ -61,19 +62,19 @@ def test():
     start = time.time()
     for d in data:
         stats.add(d)
-    print time.time() - start, "microseconds per point"
-    print "mean (should be 1)", stats.mean
-    print "kurtosis / reference kurtosis", stats.kurtosis, online_kurtosis(data)
-    print "variance / reference variance", stats.variance, online_variance(data)
-    print "skewness (should be 0)", stats.skewness
-    print "max, min, mintime, maxtime", stats.max, stats.min, stats.mintime, stats.maxtime
-    print "m2, m3, m4", stats.m2, stats.m3, stats.m4
-    print "geometric_mean, harmonic mean", stats.geometric_mean, stats.harmonic_mean
-    print "interval.min, interval.geometric_mean, interval.harmonic_mean",
-    print stats.interval.min, stats.interval.geometric_mean, stats.interval.harmonic_mean
-    print "expo_avgs (should be 1)", stats.expo_avgs
-    print "window_counts", stats.get_window_counts()
-    print "top 10", sorted(stats.get_topN())[-10:]
+    print (time.time() - start, "microseconds per point")
+    print ("mean (should be 1)", stats.mean)
+    print ("kurtosis / reference kurtosis", stats.kurtosis, online_kurtosis(data))
+    print ("variance / reference variance", stats.variance, online_variance(data))
+    print ("skewness (should be 0)", stats.skewness)
+    print ("max, min, mintime, maxtime", stats.max, stats.min, stats.mintime, stats.maxtime)
+    print ("m2, m3, m4", stats.m2, stats.m3, stats.m4)
+    print ("geometric_mean, harmonic mean", stats.geometric_mean, stats.harmonic_mean)
+    print ("interval.min, interval.geometric_mean, interval.harmonic_mean",)
+    print (stats.interval.min, stats.interval.geometric_mean, stats.interval.harmonic_mean)
+    print ("expo_avgs (should be 1)", stats.expo_avgs)
+    print ("window_counts", stats.get_window_counts())
+    print ("top 10", sorted(stats.get_topN())[-10:])
     open('test_html.html', 'w').write(faststat.format.stat2html(stats))
     return stats
 
@@ -83,7 +84,7 @@ def test_breadth():
     t = m.make_transitor('foo')
     t.transition('bar')
 
-    p = faststat.PathTree()
+    p = faststat.PathStats()
     w = p.make_walker('foo')
     w.push('bar')
     w.push('baz')
@@ -97,7 +98,7 @@ def test_breadth():
     # import pprint
     #pprint.pprint(p.state_stats.keys())
     # pprint.pprint(p.unique_paths())
-    print '\n'.join(p.pformat())
+    print ('\n'.join(p.pformat()))
 
 
 if __name__ == "__main__":
