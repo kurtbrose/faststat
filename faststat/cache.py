@@ -118,7 +118,7 @@ class SegmentedCache(object):
         return self.protected.items() + self.probationary.items()
  
     def keys(self):
-        return self.protected.keys() + self.probationary.keys()
+        return list(self.protected.keys()) + list(self.probationary.keys())
  
     def values(self):
         return self.protected.values() + self.probationary.values()
@@ -140,4 +140,4 @@ if __name__ == "__main__":
 	for i in r:
 		sg[i] = i
 		sg[i] = i
-	print "{0:.2f}us".format(time.time() - s)
+	print ("{0:.2f}us".format(time.time() - s))
