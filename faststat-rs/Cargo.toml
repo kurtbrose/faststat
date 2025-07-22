@@ -8,7 +8,7 @@ name = "_faststat"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.22", features = ["extension-module", "gil-refs", "py-clone"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.48" }

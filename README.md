@@ -3,6 +3,11 @@ faststat
 
 fast online statistics collection
 
+Requires Python 3.9 or newer.  The library works with Python 3.9 through 3.13.
+Building the optional Rust extension uses [PyO3](https://pyo3.rs) 0.22 and
+[maturin](https://github.com/PyO3/maturin), so maturin 1.4 or newer is
+recommended when compiling from source.
+
 very simple API:
 
 ```python
