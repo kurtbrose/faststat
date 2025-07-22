@@ -23,14 +23,13 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Install maturin
-        run: pip install maturin
-
       - name: Build and install package
-        run: maturin develop --release
-
-      - name: Run basic import test
-        run: python -c "import faststat; print(faststat.__version__)"
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install maturin
+          maturin develop --release
+          python -c "import faststat; print(faststat.__version__)"
 
       - name: Cargo check
         run: cargo check --manifest-path faststat-rs/Cargo.toml
