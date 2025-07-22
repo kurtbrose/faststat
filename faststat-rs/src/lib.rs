@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple, PyList};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use std::cmp::Ordering as CmpOrdering;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -9,7 +9,10 @@ fn raw_nanotime() -> u64 {
     use windows_sys::Win32::System::SystemInformation::GetSystemTimeAsFileTime;
     const DELTA_EPOCH_IN_SECS: u64 = 11_644_473_600;
     unsafe {
-        let mut ft = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+        let mut ft = FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
         GetSystemTimeAsFileTime(&mut ft);
         let ticks = ((ft.dwHighDateTime as u64) << 32) | (ft.dwLowDateTime as u64);
         (ticks - DELTA_EPOCH_IN_SECS * 10_000_000) * 100
@@ -104,7 +107,11 @@ struct Stats {
 impl Stats {
     fn nanotime() -> u64 {
         let val = NANOTIME_OVERRIDE.load(Ordering::Relaxed);
-        if val != 0 { val } else { raw_nanotime() }
+        if val != 0 {
+            val
+        } else {
+            raw_nanotime()
+        }
     }
 
     fn update_moments(&mut self, x: f64) {
@@ -123,7 +130,9 @@ impl Stats {
     fn insert_percentile_sorted(&mut self, x: f64) {
         let mut x = x;
         let num = self.n.min(self.percentiles.len() as u64) as usize;
-        if num == 0 { return; }
+        if num == 0 {
+            return;
+        }
         for i in 0..num - 1 {
             if x < self.percentiles[i].val {
                 std::mem::swap(&mut x, &mut self.percentiles[i].val);
@@ -135,12 +144,19 @@ impl Stats {
     fn p2_update_point(l_v: f64, l_n: f64, cur: &mut P2Percentile, r_v: f64, r_n: f64, n: f64) {
         let percentile = cur.percentile as f64 / 65536.0;
         let diff = (n - 1.0) * percentile + 1.0 - cur.n;
-        let d = if diff >= 1.0 { 1.0 } else if diff <= -1.0 { -1.0 } else { return };
+        let d = if diff >= 1.0 {
+            1.0
+        } else if diff <= -1.0 {
+            -1.0
+        } else {
+            return;
+        };
         let c_v = cur.val;
         let new_val = if l_n < cur.n + d && cur.n + d < r_n {
-            let val = c_v + (d / (r_n - l_n))
-                * ((cur.n - l_n + d) * (r_v - c_v) / (r_n - cur.n)
-                   + (r_n - cur.n - d) * (c_v - l_v) / (cur.n - l_n));
+            let val = c_v
+                + (d / (r_n - l_n))
+                    * ((cur.n - l_n + d) * (r_v - c_v) / (r_n - cur.n)
+                        + (r_n - cur.n - d) * (c_v - l_v) / (cur.n - l_n));
             if l_v >= val || r_v <= val {
                 if d == 1.0 {
                     c_v + (r_v - c_v) / (r_n - cur.n)
@@ -160,7 +176,9 @@ impl Stats {
     }
 
     fn update_percentiles(&mut self, x: f64) {
-        if self.percentiles.is_empty() { return; }
+        if self.percentiles.is_empty() {
+            return;
+        }
         if self.n <= self.percentiles.len() as u64 {
             self.insert_percentile_sorted(x);
             return;
@@ -214,7 +232,9 @@ impl Stats {
     }
 
     fn update_lastn(&mut self, x: f64) {
-        if self.lastn.is_empty() { return; }
+        if self.lastn.is_empty() {
+            return;
+        }
         let len = self.lastn.len();
         let idx = ((self.n - 1) as usize) & (len - 1);
         self.window_avg -= self.lastn[idx].value / len as f64;
@@ -227,7 +247,9 @@ impl Stats {
         for wc in &mut self.window_counts {
             let last_window = self.lasttime / wc.window_size;
             let cur_window = t / wc.window_size;
-            if last_window == cur_window { continue; }
+            if last_window == cur_window {
+                continue;
+            }
             let diff = cur_window.saturating_sub(last_window);
             if diff as usize >= wc.num_windows {
                 wc.counts.fill(0);
@@ -249,16 +271,26 @@ impl Stats {
     }
 
     fn update_topn(&mut self, x: f64, t: u64) {
-        if self.topn.is_empty() { return; }
-        self.topn.push(DataPoint { value: x, nanotime: t });
-        self.topn.sort_by(|a,b| b.value.partial_cmp(&a.value).unwrap_or(CmpOrdering::Equal));
+        if self.topn.is_empty() {
+            return;
+        }
+        self.topn.push(DataPoint {
+            value: x,
+            nanotime: t,
+        });
+        self.topn
+            .sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap_or(CmpOrdering::Equal));
         if self.topn.len() > self.num_top() {
             self.topn.pop();
         }
     }
 
-    fn num_top(&self) -> usize { self.topn.capacity() }
-    fn num_prev(&self) -> usize { self.lastn.capacity() }
+    fn num_top(&self) -> usize {
+        self.topn.capacity()
+    }
+    fn num_prev(&self) -> usize {
+        self.lastn.capacity()
+    }
 }
 
 #[pymethods]
@@ -275,12 +307,12 @@ impl Stats {
     ))]
     fn py_new(
         _py: Python,
-        buckets: &PyAny,
+        buckets: &Bound<'_, PyAny>,
         num_prev: usize,
-        percentiles: &PyAny,
-        interval: Option<&PyCell<Stats>>,
-        expo_avgs: Option<&PyAny>,
-        window_counts: Option<&PyAny>,
+        percentiles: &Bound<'_, PyAny>,
+        interval: Option<&Bound<'_, Stats>>,
+        expo_avgs: Option<&Bound<'_, PyAny>>,
+        window_counts: Option<&Bound<'_, PyAny>>,
         num_top: usize,
     ) -> PyResult<Self> {
         let buckets_vec: Vec<f64> = buckets.extract()?;
@@ -296,17 +328,31 @@ impl Stats {
         let percentiles = percentiles_vec
             .iter()
             .enumerate()
-            .map(|(i, p)| P2Percentile { percentile: ((*p * 65536.0).round() as u16), val: 0.0, n: (i + 1) as f64 })
+            .map(|(i, p)| P2Percentile {
+                percentile: ((*p * 65536.0).round() as u16),
+                val: 0.0,
+                n: (i + 1) as f64,
+            })
             .collect();
-        let buckets = buckets_vec.into_iter().map(|b| Bucket { max: b, count: 0 }).collect();
-        let expo_avgs = expo_vec.into_iter().map(|a| ExpoAvg { val: 0.0, alpha: a }).collect();
+        let buckets = buckets_vec
+            .into_iter()
+            .map(|b| Bucket { max: b, count: 0 })
+            .collect();
+        let expo_avgs = expo_vec
+            .into_iter()
+            .map(|a| ExpoAvg { val: 0.0, alpha: a })
+            .collect();
         let window_counts = wc_vec
             .into_iter()
-            .map(|(n, size)| WindowCount { num_windows: n, window_size: size, counts: vec![0; n] })
+            .map(|(n, size)| WindowCount {
+                num_windows: n,
+                window_size: size,
+                counts: vec![0; n],
+            })
             .collect();
         let lastn = vec![DataPoint::default(); num_prev];
         let topn: Vec<DataPoint> = Vec::with_capacity(num_top);
-        let interval_py = interval.map(Into::into);
+        let interval_py = interval.map(|b| b.clone().unbind());
         Ok(Stats {
             n: 0,
             mean: 0.0,
@@ -366,7 +412,7 @@ impl Stats {
     }
 
     fn get_percentiles(&self, py: Python) -> Py<PyDict> {
-        let dict = PyDict::new(py);
+        let dict = PyDict::new_bound(py);
         for p in &self.percentiles {
             let key = ((p.percentile as f64) / 65536.0 * 10000.0).floor() / 10000.0;
             dict.set_item(key, p.val).unwrap();
@@ -376,7 +422,7 @@ impl Stats {
 
     fn get_buckets(&self, py: Python) -> Py<PyDict> {
         let mut leftover = self.n;
-        let dict = PyDict::new(py);
+        let dict = PyDict::new_bound(py);
         for b in &self.buckets {
             leftover -= b.count;
             dict.set_item(b.max, b.count).unwrap();
@@ -386,7 +432,7 @@ impl Stats {
     }
 
     fn get_expo_avgs(&self, py: Python) -> Py<PyDict> {
-        let dict = PyDict::new(py);
+        let dict = PyDict::new_bound(py);
         for ea in &self.expo_avgs {
             dict.set_item(ea.alpha, ea.val).unwrap();
         }
@@ -400,13 +446,17 @@ impl Stats {
         let len = self.num_prev();
         let idx = (((self.n - 1) as usize + (len - offset)) & (len - 1)) as usize;
         let dp = &self.lastn[idx];
-        PyTuple::new(py, &[dp.nanotime.into_py(py), dp.value.into_py(py)]).into()
+        PyTuple::new_bound(py, &[dp.nanotime.into_py(py), dp.value.into_py(py)]).into()
     }
 
     fn get_top_n(&self, py: Python) -> PyObject {
-        let list = PyList::empty(py);
+        let list = PyList::empty_bound(py);
         for dp in &self.topn {
-            list.append(PyTuple::new(py, &[dp.value.into_py(py), dp.nanotime.into_py(py)])).unwrap();
+            list.append(PyTuple::new_bound(
+                py,
+                &[dp.value.into_py(py), dp.nanotime.into_py(py)],
+            ))
+            .unwrap();
         }
         list.into()
     }
@@ -414,9 +464,12 @@ impl Stats {
     fn get_window_counts(&self, py: Python) -> Py<PyDict> {
         let t = Self::nanotime();
         let wc_clone = self.window_counts.clone();
-        let mut temp = Stats { window_counts: wc_clone.clone(), ..self.clone() };
+        let mut temp = Stats {
+            window_counts: wc_clone.clone(),
+            ..self.clone()
+        };
         temp.rezero_window_counts(t);
-        let dict = PyDict::new(py);
+        let dict = PyDict::new_bound(py);
         for wc in &temp.window_counts {
             let cur_window = t / wc.window_size;
             let mut items = Vec::with_capacity(wc.num_windows);
@@ -424,33 +477,60 @@ impl Stats {
                 let idx = ((cur_window - j as u64) & (wc.num_windows as u64 - 1)) as usize;
                 items.push(wc.counts[idx]);
             }
-            dict.set_item(wc.window_size, PyTuple::new(py, &items)).unwrap();
+            dict.set_item(wc.window_size, PyTuple::new_bound(py, &items))
+                .unwrap();
         }
         dict.into()
     }
 
     #[getter]
-    fn n(&self) -> u64 { self.n }
+    fn n(&self) -> u64 {
+        self.n
+    }
     #[getter]
-    fn mean(&self) -> f64 { self.mean }
+    fn mean(&self) -> f64 {
+        self.mean
+    }
     #[getter]
-    fn m2(&self) -> f64 { self.m2 }
+    fn m2(&self) -> f64 {
+        self.m2
+    }
     #[getter]
-    fn m3(&self) -> f64 { self.m3 }
+    fn m3(&self) -> f64 {
+        self.m3
+    }
     #[getter]
-    fn m4(&self) -> f64 { self.m4 }
+    fn m4(&self) -> f64 {
+        self.m4
+    }
     #[getter]
-    fn variance(&self) -> Option<f64> { if self.n < 2 { None } else { Some(self.m2 / (self.n as f64 - 1.0)) } }
+    fn variance(&self) -> Option<f64> {
+        if self.n < 2 {
+            None
+        } else {
+            Some(self.m2 / (self.n as f64 - 1.0))
+        }
+    }
     #[getter]
-    fn min(&self) -> f64 { self.min }
+    fn min(&self) -> f64 {
+        self.min
+    }
     #[getter]
-    fn max(&self) -> f64 { self.max }
+    fn max(&self) -> f64 {
+        self.max
+    }
     #[getter]
-    fn sum_of_logs(&self) -> f64 { self.sum_of_logs }
+    fn sum_of_logs(&self) -> f64 {
+        self.sum_of_logs
+    }
     #[getter]
-    fn sum_of_inv(&self) -> f64 { self.sum_of_inv }
+    fn sum_of_inv(&self) -> f64 {
+        self.sum_of_inv
+    }
     #[getter]
-    fn lasttime(&self) -> u64 { self.lasttime }
+    fn lasttime(&self) -> u64 {
+        self.lasttime
+    }
 }
 
 impl Stats {
@@ -463,8 +543,14 @@ impl Stats {
             self.mintime = t;
             self.maxtime = t;
         }
-        if x <= self.min { self.mintime = t; self.min = x; }
-        if x >= self.max { self.maxtime = t; self.max = x; }
+        if x <= self.min {
+            self.mintime = t;
+            self.min = x;
+        }
+        if x >= self.max {
+            self.maxtime = t;
+            self.max = x;
+        }
         self.sum_of_logs += if x > 0.0 { x.ln() } else { f64::NAN };
         self.sum_of_inv += if x > 0.0 { 1.0 / x } else { f64::NAN };
         self.update_moments(x);
@@ -478,13 +564,17 @@ impl Stats {
 }
 
 #[pyfunction]
-fn nanotime() -> PyResult<u64> { Ok(Stats::nanotime()) }
+fn nanotime() -> PyResult<u64> {
+    Ok(Stats::nanotime())
+}
 
 #[pyfunction]
-fn _nanotime_override(t: u64) { NANOTIME_OVERRIDE.store(t, Ordering::Relaxed); }
+fn _nanotime_override(t: u64) {
+    NANOTIME_OVERRIDE.store(t, Ordering::Relaxed);
+}
 
 #[pymodule]
-fn _faststat(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _faststat(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Stats>()?;
     m.add_function(wrap_pyfunction!(nanotime, m)?)?;
     m.add_function(wrap_pyfunction!(_nanotime_override, m)?)?;
