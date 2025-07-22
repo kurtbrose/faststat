@@ -125,19 +125,19 @@ class SegmentedCache(object):
  
  
 if __name__ == "__main__":
-	cache_size = 7
-	sg = SegmentedCache(cache_size)
-	r = range(10000)
-	for i in r:
-		sg[i] = i
-	for i in r[-cache_size:]:
-		assert i in sg
- 
-	import time
- 
-	r = range(int(5e5))
-	s = time.time()
-	for i in r:
-		sg[i] = i
-		sg[i] = i
-	print "{0:.2f}us".format(time.time() - s)
+    cache_size = 7
+    sg = SegmentedCache(cache_size)
+    r = range(10000)
+    for i in r:
+        sg[i] = i
+    for i in r[-cache_size:]:
+        assert i in sg
+
+    import time
+
+    r = range(int(5e5))
+    s = time.time()
+    for i in r:
+        sg[i] = i
+        sg[i] = i
+    print("{0:.2f}us".format(time.time() - s))

@@ -16,8 +16,8 @@ import json
 import weakref
 
 import _faststat
-import cache
-import format
+from . import cache
+from . import format
 
 
 class Sample(object):
