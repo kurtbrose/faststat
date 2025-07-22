@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.0"]
+requires = ["maturin>=1.4"]
 build-backend = "maturin"
 
 [project]
@@ -9,9 +9,19 @@ authors = [{name = "Kurt Rose", email = "kurt@kurtrose.com"}]
 description = "fast online statistics collection"
 readme = "README.md"
 license = { text = "MIT" }
+requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
 ]
 
 [tool.maturin]
