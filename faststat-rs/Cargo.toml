@@ -1,0 +1,17 @@
+[package]
+name = "faststat-rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_faststat"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.48" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

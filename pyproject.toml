@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.0"]
+build-backend = "maturin"
+
+[project]
+name = "faststat"
+version = "17.10.0"
+authors = [{name = "Kurt Rose", email = "kurt@kurtrose.com"}]
+description = "fast online statistics collection"
+readme = "README.md"
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+]
+
+[tool.maturin]
+python-source = "faststat"
+module-name = "_faststat"
+manifest-path = "faststat-rs/Cargo.toml"
+bindings = "pyo3"
