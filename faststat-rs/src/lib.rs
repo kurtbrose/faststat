@@ -81,7 +81,7 @@ struct WindowCount {
 
 #[pyclass]
 #[derive(Clone)]
-struct Stats {
+struct StatsLite {
     n: u64,
     mean: f64,
     m2: f64,
@@ -91,6 +91,119 @@ struct Stats {
     max: f64,
     sum_of_logs: f64,
     sum_of_inv: f64,
+}
+
+impl StatsLite {
+    fn new() -> Self {
+        StatsLite {
+            n: 0,
+            mean: 0.0,
+            m2: 0.0,
+            m3: 0.0,
+            m4: 0.0,
+            min: f64::INFINITY,
+            max: f64::NEG_INFINITY,
+            sum_of_logs: 0.0,
+            sum_of_inv: 0.0,
+        }
+    }
+
+    fn update_moments(&mut self, x: f64) {
+        let n = self.n as f64;
+        let delta = x - self.mean;
+        let delta_n = delta / n;
+        let delta_m2 = delta * delta_n * (n - 1.0);
+        let delta_m3 = delta_m2 * delta_n * (n - 2.0);
+        let delta_m4 = delta_m2 * delta_n * delta_n * (n * (n - 3.0) + 3.0);
+        self.mean += delta_n;
+        self.m4 += delta_m4 + delta_n * (6.0 * delta_n * self.m2 - 4.0 * self.m3);
+        self.m3 += delta_m3 + delta_n * 3.0 * self.m2;
+        self.m2 += delta_m2;
+    }
+
+    pub(crate) fn add_internal(&mut self, x: f64) {
+        self.n += 1;
+        if self.n == 1 {
+            self.min = x;
+            self.max = x;
+        }
+        if x <= self.min {
+            self.min = x;
+        }
+        if x >= self.max {
+            self.max = x;
+        }
+        self.sum_of_logs += if x > 0.0 { x.ln() } else { f64::NAN };
+        self.sum_of_inv += if x > 0.0 { 1.0 / x } else { f64::NAN };
+        self.update_moments(x);
+    }
+
+    fn variance_val(&self) -> Option<f64> {
+        if self.n < 2 {
+            None
+        } else {
+            Some(self.m2 / (self.n as f64 - 1.0))
+        }
+    }
+}
+
+#[pymethods]
+impl StatsLite {
+    #[new]
+    fn py_new() -> Self {
+        StatsLite::new()
+    }
+
+    fn add(&mut self, x: f64) {
+        self.add_internal(x);
+    }
+
+    #[getter]
+    fn n(&self) -> u64 {
+        self.n
+    }
+    #[getter]
+    fn mean(&self) -> f64 {
+        self.mean
+    }
+    #[getter]
+    fn m2(&self) -> f64 {
+        self.m2
+    }
+    #[getter]
+    fn m3(&self) -> f64 {
+        self.m3
+    }
+    #[getter]
+    fn m4(&self) -> f64 {
+        self.m4
+    }
+    #[getter]
+    fn variance(&self) -> Option<f64> {
+        self.variance_val()
+    }
+    #[getter]
+    fn min(&self) -> f64 {
+        self.min
+    }
+    #[getter]
+    fn max(&self) -> f64 {
+        self.max
+    }
+    #[getter]
+    fn sum_of_logs(&self) -> f64 {
+        self.sum_of_logs
+    }
+    #[getter]
+    fn sum_of_inv(&self) -> f64 {
+        self.sum_of_inv
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct Stats {
+    core: StatsLite,
     mintime: u64,
     maxtime: u64,
     lasttime: u64,
@@ -115,21 +228,12 @@ impl Stats {
     }
 
     fn update_moments(&mut self, x: f64) {
-        let n = self.n as f64;
-        let delta = x - self.mean;
-        let delta_n = delta / n;
-        let delta_m2 = delta * delta_n * (n - 1.0);
-        let delta_m3 = delta_m2 * delta_n * (n - 2.0);
-        let delta_m4 = delta_m2 * delta_n * delta_n * (n * (n - 3.0) + 3.0);
-        self.mean += delta_n;
-        self.m4 += delta_m4 + delta_n * (6.0 * delta_n * self.m2 - 4.0 * self.m3);
-        self.m3 += delta_m3 + delta_n * 3.0 * self.m2;
-        self.m2 += delta_m2;
+        self.core.update_moments(x);
     }
 
     fn insert_percentile_sorted(&mut self, x: f64) {
         let mut x = x;
-        let num = self.n.min(self.percentiles.len() as u64) as usize;
+        let num = self.core.n.min(self.percentiles.len() as u64) as usize;
         if num == 0 {
             return;
         }
@@ -179,11 +283,11 @@ impl Stats {
         if self.percentiles.is_empty() {
             return;
         }
-        if self.n <= self.percentiles.len() as u64 {
+        if self.core.n <= self.percentiles.len() as u64 {
             self.insert_percentile_sorted(x);
             return;
         }
-        let n = self.n as f64;
+        let n = self.core.n as f64;
         let last = self.percentiles.len() - 1;
         if x < self.percentiles[0].val {
             self.percentiles[0].val = x;
@@ -200,7 +304,7 @@ impl Stats {
                 }
             }
         }
-        let mut prev_v = self.min;
+        let mut prev_v = self.core.min;
         let mut prev_n = 0.0;
         for i in 0..last {
             let (r_v, r_n) = {
@@ -213,7 +317,7 @@ impl Stats {
             prev_n = cur.n;
         }
         let cur = &mut self.percentiles[last];
-        Self::p2_update_point(prev_v, prev_n, cur, self.max, n, n);
+        Self::p2_update_point(prev_v, prev_n, cur, self.core.max, n, n);
     }
 
     fn update_buckets(&mut self, x: f64) {
@@ -236,7 +340,7 @@ impl Stats {
             return;
         }
         let len = self.lastn.len();
-        let idx = ((self.n - 1) as usize) & (len - 1);
+        let idx = ((self.core.n() - 1) as usize) & (len - 1);
         self.window_avg -= self.lastn[idx].value / len as f64;
         self.window_avg += x / len as f64;
         self.lastn[idx].value = x;
@@ -354,15 +458,7 @@ impl Stats {
         let topn: Vec<DataPoint> = Vec::with_capacity(num_top);
         let interval_py = interval.map(|b| b.clone().unbind());
         Ok(Stats {
-            n: 0,
-            mean: 0.0,
-            m2: 0.0,
-            m3: 0.0,
-            m4: 0.0,
-            min: f64::INFINITY,
-            max: f64::NEG_INFINITY,
-            sum_of_logs: 0.0,
-            sum_of_inv: 0.0,
+            core: StatsLite::new(),
             mintime: 0,
             maxtime: 0,
             lasttime: 0,
@@ -421,7 +517,7 @@ impl Stats {
     }
 
     fn get_buckets(&self, py: Python) -> Py<PyDict> {
-        let mut leftover = self.n;
+        let mut leftover = self.core.n();
         let dict = PyDict::new_bound(py);
         for b in &self.buckets {
             leftover -= b.count;
@@ -444,7 +540,7 @@ impl Stats {
             return py.None();
         }
         let len = self.num_prev();
-        let idx = (((self.n - 1) as usize + (len - offset)) & (len - 1)) as usize;
+        let idx = (((self.core.n() - 1) as usize + (len - offset)) & (len - 1)) as usize;
         let dp = &self.lastn[idx];
         PyTuple::new_bound(py, &[dp.nanotime.into_py(py), dp.value.into_py(py)]).into()
     }
@@ -485,47 +581,43 @@ impl Stats {
 
     #[getter]
     fn n(&self) -> u64 {
-        self.n
+        self.core.n()
     }
     #[getter]
     fn mean(&self) -> f64 {
-        self.mean
+        self.core.mean()
     }
     #[getter]
     fn m2(&self) -> f64 {
-        self.m2
+        self.core.m2()
     }
     #[getter]
     fn m3(&self) -> f64 {
-        self.m3
+        self.core.m3()
     }
     #[getter]
     fn m4(&self) -> f64 {
-        self.m4
+        self.core.m4()
     }
     #[getter]
     fn variance(&self) -> Option<f64> {
-        if self.n < 2 {
-            None
-        } else {
-            Some(self.m2 / (self.n as f64 - 1.0))
-        }
+        self.core.variance_val()
     }
     #[getter]
     fn min(&self) -> f64 {
-        self.min
+        self.core.min
     }
     #[getter]
     fn max(&self) -> f64 {
-        self.max
+        self.core.max
     }
     #[getter]
     fn sum_of_logs(&self) -> f64 {
-        self.sum_of_logs
+        self.core.sum_of_logs
     }
     #[getter]
     fn sum_of_inv(&self) -> f64 {
-        self.sum_of_inv
+        self.core.sum_of_inv
     }
     #[getter]
     fn lasttime(&self) -> u64 {
@@ -536,24 +628,17 @@ impl Stats {
 impl Stats {
     fn _add(&mut self, x: f64, t: u64) {
         self.lasttime = t;
-        self.n += 1;
-        if self.n == 1 {
-            self.min = x;
-            self.max = x;
+        self.core.add_internal(x);
+        if self.core.n == 1 {
             self.mintime = t;
             self.maxtime = t;
         }
-        if x <= self.min {
+        if x <= self.core.min {
             self.mintime = t;
-            self.min = x;
         }
-        if x >= self.max {
+        if x >= self.core.max {
             self.maxtime = t;
-            self.max = x;
         }
-        self.sum_of_logs += if x > 0.0 { x.ln() } else { f64::NAN };
-        self.sum_of_inv += if x > 0.0 { 1.0 / x } else { f64::NAN };
-        self.update_moments(x);
         self.update_percentiles(x);
         self.update_buckets(x);
         self.update_expo_avgs(x);
@@ -576,6 +661,7 @@ fn _nanotime_override(t: u64) {
 #[pymodule]
 fn _faststat(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Stats>()?;
+    m.add_class::<StatsLite>()?;
     m.add_function(wrap_pyfunction!(nanotime, m)?)?;
     m.add_function(wrap_pyfunction!(_nanotime_override, m)?)?;
     Ok(())
