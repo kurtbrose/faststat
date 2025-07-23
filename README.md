@@ -18,9 +18,21 @@ very simple API:
 ...
 ```
 
+For lower overhead you can use ``StatsLite`` which keeps only the
+core moments:
 
-The following properties are accesible on a Stats object: n, min, max, variance, skewness, and kurtosis.
-In addition, a Stats object tracks percentiles.
+```python
+>>> lite = faststat.StatsLite()
+>>> lite.add(point)
+```
+
+
+The following properties are accessible on a ``Stats`` object: ``n``, ``min``,
+``max``, variance, skewness and kurtosis.  It also tracks percentiles and other
+optional features.
+
+``StatsLite`` exposes the same basic properties without the percentile or
+window-tracking overhead.
 
 Performance is pretty good: 0.63 microseconds per point on my machine.  (Provided the C module is available.)
 

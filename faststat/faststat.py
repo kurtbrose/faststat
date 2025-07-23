@@ -168,6 +168,48 @@ class Stats(_BaseStats):
             return getattr(self._stats, name)
 
 
+class StatsLite(object):
+    '''
+    Lightweight statistics class tracking only counts and moments.
+    '''
+    def __init__(self):
+        self._stats = _faststat.StatsLite()
+        self.add = self._stats.add
+
+    def __getattr__(self, name):
+        return getattr(self._stats, name)
+
+    @property
+    def variance(self):
+        if self.n < 2:
+            return float('nan')
+        return self.m2 / (self.n - 1)
+
+    @property
+    def skewness(self):
+        if not self.m2:
+            return float('nan')
+        return self.n ** 0.5 * self.m3 / self.m2 ** 1.5
+
+    @property
+    def kurtosis(self):
+        if not self.m2:
+            return float('nan')
+        return self.n * self.m4 / self.m2 ** 2 - 3
+
+    @property
+    def geometric_mean(self):
+        return math.exp(self.sum_of_logs / self.n)
+
+    @property
+    def harmonic_mean(self):
+        return self.n / self.sum_of_inv
+
+    def __repr__(self):
+        return '<faststat.StatsLite n={0} mean={1}>'.format(
+            self.n, _sigfigs(self.mean))
+
+
 class _TimeStats(_BaseStats):
     def get_percentiles(self):
         data = self._stats.get_percentiles()
