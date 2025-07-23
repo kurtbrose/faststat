@@ -1,0 +1,8 @@
+[package]
+name = "faststat-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+windows-sys = { version = "0.48", optional = true, features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
