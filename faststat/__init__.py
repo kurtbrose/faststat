@@ -2,6 +2,7 @@
 # using relative imports so ``import faststat`` works correctly.
 from .faststat import *
 from .format import *
+from .profiler import Profiler, cli as profiler_cli
 
 try:
     from importlib.metadata import version as _version, PackageNotFoundError

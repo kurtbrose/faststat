@@ -42,3 +42,13 @@ skewness (should be 0) -0.0071960817771
 max, min 5.83625092886 -3.4749002526
 m2, m3, m4 999218.191078 -7187.64448532 2993126.28574
 ```
+
+Profiler
+--------
+The :mod:`faststat.profiler` module can attach using the standard
+``sys.setprofile`` and ``sys.settrace`` hooks to collect per-function or
+per-line timing information.  Run a script under the profiler using::
+
+    python -m faststat.profiler myscript.py
+
+This prints timing statistics for the executed code.
