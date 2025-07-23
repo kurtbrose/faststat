@@ -43,6 +43,19 @@ max, min 5.83625092886 -3.4749002526
 m2, m3, m4 999218.191078 -7187.64448532 2993126.28574
 ```
 
+Rust Usage
+----------
+A standalone Rust crate `faststat-core` provides the same streaming statistics.
+Example:
+```rust
+use faststat_core::Stats;
+
+let mut s = Stats::new();
+s.add(1.0);
+s.add(2.0);
+println!("mean {}", s.mean());
+```
+
 Profiler
 --------
 The :mod:`faststat.profiler` module can attach using the standard
