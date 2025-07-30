@@ -264,9 +264,14 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'http://docs.python.org/': None}
+# Use a modern mapping format that Sphinx expects.
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+}
 
 import sys
 import os.path
-sys.path = [os.path.dirname(os.path.dirname(os.path.abspath(__file__)))] + sys.path
+sys.path = [
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+] + sys.path
 
